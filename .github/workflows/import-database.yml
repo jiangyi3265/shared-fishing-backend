@@ -86,8 +86,13 @@ jobs:
           root	
           "
 
-          if [ -f /www/server/panel/data/default.db ] && command -v python3 >/dev/null 2>&1; then
-            BT_DB_CREDS="$(python3 - <<'PY'
+          PY_BIN="$(command -v python3 || command -v python || true)"
+          if [ -z "${PY_BIN}" ] && [ -x /www/server/panel/pyenv/bin/python ]; then
+            PY_BIN=/www/server/panel/pyenv/bin/python
+          fi
+
+          if [ -f /www/server/panel/data/default.db ] && [ -n "${PY_BIN}" ]; then
+            BT_DB_CREDS="$("${PY_BIN}" - <<'PY'
           import os
           import sqlite3
 
@@ -96,20 +101,31 @@ jobs:
 
           try:
               conn = sqlite3.connect(db_path)
-              row = conn.execute(
-                  "select username, password from databases where name = ? limit 1",
-                  (db_name,),
-              ).fetchone()
-              if row:
-                  print((row[0] or "") + "\t" + (row[1] or ""))
+              tables = [r[0] for r in conn.execute("select name from sqlite_master where type = 'table'")]
+              for table in tables:
+                  cols = [r[1] for r in conn.execute("pragma table_info(%s)" % table)]
+                  if not {"username", "password"}.issubset(set(cols)):
+                      continue
+                  name_cols = [c for c in ("name", "db_name", "database") if c in cols]
+                  for name_col in name_cols:
+                      sql = "select username, password from %s where %s = ? limit 1" % (table, name_col)
+                      row = conn.execute(sql, (db_name,)).fetchone()
+                      if row:
+                          print((row[0] or "") + "\t" + (row[1] or ""))
+                          raise SystemExit(0)
           except Exception:
               pass
           PY
           )"
             if [ -n "${BT_DB_CREDS}" ]; then
+              echo "BT panel database credentials found for ${DB_NAME}."
               CANDIDATES="${CANDIDATES}${BT_DB_CREDS}
           "
+            else
+              echo "BT panel database credentials not found for ${DB_NAME}."
             fi
+          else
+            echo "BT panel database metadata or Python runtime not found."
           fi
 
           mysql_with_creds() {
