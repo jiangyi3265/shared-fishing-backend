@@ -58,8 +58,8 @@ jobs:
           : "${SSH_PASSWORD:?Missing SSH_PASSWORD secret}"
           SSH_PORT="${SSH_PORT:-22}"
           SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -C"
-          DB_USER="${DB_USER:-root}"
-          DB_PASSWORD="${DB_PASSWORD:-123456}"
+          DB_USER="${DB_USER:-}"
+          DB_PASSWORD="${DB_PASSWORD:-}"
 
           sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DB_NAME='${DB_NAME}' DB_USER='${DB_USER}' DB_PASSWORD='${DB_PASSWORD}' bash -s" <<'EOF'
           set -euo pipefail
@@ -77,12 +77,74 @@ jobs:
             exit 1
           fi
 
-          mysql_exec() {
-            MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_BIN}" --default-character-set=utf8mb4 -u "${DB_USER}" "$@"
+          CANDIDATES=""
+          if [ -n "${DB_USER}" ]; then
+            CANDIDATES="${CANDIDATES}${DB_USER}	${DB_PASSWORD}
+          "
+          fi
+          CANDIDATES="${CANDIDATES}root	123456
+          root	
+          "
+
+          if [ -f /www/server/panel/data/default.db ] && command -v python3 >/dev/null 2>&1; then
+            BT_DB_CREDS="$(python3 - <<'PY'
+          import os
+          import sqlite3
+
+          db_name = os.environ.get("DB_NAME")
+          db_path = "/www/server/panel/data/default.db"
+
+          try:
+              conn = sqlite3.connect(db_path)
+              row = conn.execute(
+                  "select username, password from databases where name = ? limit 1",
+                  (db_name,),
+              ).fetchone()
+              if row:
+                  print((row[0] or "") + "\t" + (row[1] or ""))
+          except Exception:
+              pass
+          PY
+          )"
+            if [ -n "${BT_DB_CREDS}" ]; then
+              CANDIDATES="${CANDIDATES}${BT_DB_CREDS}
+          "
+            fi
+          fi
+
+          mysql_with_creds() {
+            local user="$1"
+            local password="$2"
+            shift 2
+            if [ -n "${password}" ]; then
+              MYSQL_PWD="${password}" "${MYSQL_BIN}" --default-character-set=utf8mb4 -u "${user}" "$@"
+            else
+              "${MYSQL_BIN}" --default-character-set=utf8mb4 -u "${user}" "$@"
+            fi
           }
 
-          mysql_exec -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
-          mysql_exec "${DB_NAME}" < ry_20250522.sql
-          mysql_exec "${DB_NAME}" < fishing.sql
-          mysql_exec "${DB_NAME}" -e "SELECT DATABASE() AS db_name; SELECT COUNT(*) AS fish_table_count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'fish_%'; SELECT COUNT(*) AS sys_table_count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'sys_%';"
+          SELECTED_USER=""
+          SELECTED_PASSWORD=""
+          while IFS="$(printf '\t')" read -r user password; do
+            if [ -z "${user}" ]; then
+              continue
+            fi
+            if mysql_with_creds "${user}" "${password}" "${DB_NAME}" -e "SELECT 1;" >/dev/null 2>&1; then
+              SELECTED_USER="${user}"
+              SELECTED_PASSWORD="${password}"
+              break
+            fi
+          done <<CANDIDATE_EOF
+          ${CANDIDATES}
+          CANDIDATE_EOF
+
+          if [ -z "${SELECTED_USER}" ]; then
+            echo "Cannot connect to MySQL database ${DB_NAME}. Set DB_USER and DB_PASSWORD secrets if needed."
+            exit 1
+          fi
+
+          echo "Using MySQL user ${SELECTED_USER} for database ${DB_NAME}."
+          mysql_with_creds "${SELECTED_USER}" "${SELECTED_PASSWORD}" "${DB_NAME}" < ry_20250522.sql
+          mysql_with_creds "${SELECTED_USER}" "${SELECTED_PASSWORD}" "${DB_NAME}" < fishing.sql
+          mysql_with_creds "${SELECTED_USER}" "${SELECTED_PASSWORD}" "${DB_NAME}" -e "SELECT DATABASE() AS db_name; SELECT COUNT(*) AS fish_table_count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'fish_%'; SELECT COUNT(*) AS sys_table_count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'sys_%';"
           EOF
