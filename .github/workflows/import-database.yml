@@ -1,0 +1,88 @@
+name: Import Database
+
+on:
+  workflow_dispatch:
+    inputs:
+      database:
+        description: MySQL database name
+        required: true
+        default: diaoyu
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Package SQL
+        run: tar -czf database-sql.tar.gz -C sql ry_20250522.sql fishing.sql
+
+      - name: Install SSH helper
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Upload SQL
+        timeout-minutes: 5
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          : "${SSH_HOST:?Missing SSH_HOST secret}"
+          : "${SSH_USER:?Missing SSH_USER secret}"
+          : "${SSH_PASSWORD:?Missing SSH_PASSWORD secret}"
+          SSH_PORT="${SSH_PORT:-22}"
+          SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -C"
+          REMOTE_DIR="/tmp/shared-fishing-db-import"
+
+          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${REMOTE_DIR}'"
+          sshpass -p "${SSH_PASSWORD}" scp ${SSH_OPTS} -P "${SSH_PORT}" database-sql.tar.gz "${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/database-sql.tar.gz"
+
+      - name: Import SQL
+        timeout-minutes: 5
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          DB_NAME: ${{ inputs.database }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          : "${SSH_HOST:?Missing SSH_HOST secret}"
+          : "${SSH_USER:?Missing SSH_USER secret}"
+          : "${SSH_PASSWORD:?Missing SSH_PASSWORD secret}"
+          SSH_PORT="${SSH_PORT:-22}"
+          SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -C"
+          DB_USER="${DB_USER:-root}"
+          DB_PASSWORD="${DB_PASSWORD:-123456}"
+
+          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DB_NAME='${DB_NAME}' DB_USER='${DB_USER}' DB_PASSWORD='${DB_PASSWORD}' bash -s" <<'EOF'
+          set -euo pipefail
+
+          REMOTE_DIR="/tmp/shared-fishing-db-import"
+          cd "${REMOTE_DIR}"
+          tar -xzf database-sql.tar.gz
+
+          MYSQL_BIN="$(command -v mysql || true)"
+          if [ -z "${MYSQL_BIN}" ] && [ -x /www/server/mysql/bin/mysql ]; then
+            MYSQL_BIN=/www/server/mysql/bin/mysql
+          fi
+          if [ -z "${MYSQL_BIN}" ]; then
+            echo "mysql command not found"
+            exit 1
+          fi
+
+          mysql_exec() {
+            MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_BIN}" --default-character-set=utf8mb4 -u "${DB_USER}" "$@"
+          }
+
+          mysql_exec -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          mysql_exec "${DB_NAME}" < ry_20250522.sql
+          mysql_exec "${DB_NAME}" < fishing.sql
+          mysql_exec "${DB_NAME}" -e "SELECT DATABASE() AS db_name; SELECT COUNT(*) AS fish_table_count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'fish_%'; SELECT COUNT(*) AS sys_table_count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'sys_%';"
+          EOF
