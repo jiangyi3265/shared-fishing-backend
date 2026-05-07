@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishUserMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishUser" id="FishUserResult">
+        <id     property="userId"        column="user_id"/>
+        <result property="openid"        column="openid"/>
+        <result property="unionid"       column="unionid"/>
+        <result property="nickname"      column="nickname"/>
+        <result property="avatar"        column="avatar"/>
+        <result property="phone"         column="phone"/>
+        <result property="status"        column="status"/>
+        <result property="lastLoginTime" column="last_login_time"/>
+        <result property="createTime"    column="create_time"/>
+        <result property="updateTime"    column="update_time"/>
+    </resultMap>
+
+    <sql id="selectFishUserVo">
+        select user_id, openid, unionid, nickname, avatar, phone, status, last_login_time, create_time, update_time
+        from fish_user
+    </sql>
+
+    <select id="selectFishUserList" parameterType="com.ruoyi.fishing.domain.FishUser" resultMap="FishUserResult">
+        <include refid="selectFishUserVo"/>
+        <where>
+            <if test="nickname != null and nickname != ''">AND nickname like concat('%', #{nickname}, '%')</if>
+            <if test="phone != null and phone != ''">AND phone like concat('%', #{phone}, '%')</if>
+            <if test="status != null and status != ''">AND status = #{status}</if>
+        </where>
+        order by user_id desc
+    </select>
+
+    <select id="selectFishUserByUserId" parameterType="Long" resultMap="FishUserResult">
+        <include refid="selectFishUserVo"/> where user_id = #{userId}
+    </select>
+
+    <select id="selectFishUserByOpenid" resultMap="FishUserResult">
+        <include refid="selectFishUserVo"/> where openid = #{openid} limit 1
+    </select>
+
+    <insert id="insertFishUser" parameterType="com.ruoyi.fishing.domain.FishUser" useGeneratedKeys="true" keyProperty="userId">
+        insert into fish_user (openid, unionid, nickname, avatar, phone, status, last_login_time, create_time)
+        values (#{openid}, #{unionid}, #{nickname}, #{avatar}, #{phone}, #{status}, sysdate(), sysdate())
+    </insert>
+
+    <update id="updateFishUser" parameterType="com.ruoyi.fishing.domain.FishUser">
+        update fish_user
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="unionid != null">unionid = #{unionid},</if>
+            <if test="nickname != null">nickname = #{nickname},</if>
+            <if test="avatar != null">avatar = #{avatar},</if>
+            <if test="phone != null">phone = #{phone},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="lastLoginTime != null">last_login_time = #{lastLoginTime},</if>
+            update_time = sysdate()
+        </trim>
+        where user_id = #{userId}
+    </update>
+
+    <delete id="deleteFishUserByUserId" parameterType="Long">
+        delete from fish_user where user_id = #{userId}
+    </delete>
+</mapper>

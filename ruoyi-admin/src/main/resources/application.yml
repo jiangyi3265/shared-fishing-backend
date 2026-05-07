@@ -134,3 +134,24 @@ xss:
   excludes: /system/notice
   # 匹配链接
   urlPatterns: /system/*,/monitor/*,/tool/*
+
+# 微信小程序配置
+wx:
+  miniapp:
+    # 小程序 AppID（上线前务必改成真实 appid）
+    appid: ${WX_APPID:wxc0bf4aba46ccdfe9}
+    # 小程序 AppSecret
+    secret: ${WX_SECRET:please-replace-me}
+    # code2session 地址
+    code2session-url: https://api.weixin.qq.com/sns/jscode2session
+  pay:
+    # 是否启用真实微信支付；false 时使用 mock 通道方便本地联调
+    enabled: ${WX_PAY_ENABLED:false}
+    mch-id: ${WX_PAY_MCH_ID:}
+    api-v3-key: ${WX_PAY_APIV3:}
+    notify-url: ${WX_PAY_NOTIFY:https://example.com/app/order/pay/notify}
+    # 商户证书私钥路径
+    private-key-path: ${WX_PAY_PRIVATE_KEY:}
+    # 证书序列号
+    cert-serial: ${WX_PAY_CERT_SERIAL:}
+

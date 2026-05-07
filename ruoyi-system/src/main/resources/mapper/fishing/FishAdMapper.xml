@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishAdMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishAd" id="FishAdResult">
+        <id     property="adId"              column="ad_id"/>
+        <result property="adType"            column="ad_type"/>
+        <result property="title"             column="title"/>
+        <result property="description"       column="description"/>
+        <result property="image"             column="image"/>
+        <result property="bgColor"           column="bg_color"/>
+        <result property="content"           column="content"/>
+        <result property="sortNum"           column="sort_num"/>
+        <result property="activityName"      column="activity_name"/>
+        <result property="activityDate"      column="activity_date"/>
+        <result property="activityLocation"  column="activity_location"/>
+        <result property="activityFeeCents"  column="activity_fee_cents"/>
+        <result property="activitySlots"     column="activity_slots"/>
+        <result property="activityRules"     column="activity_rules"/>
+        <result property="couponTemplateId"  column="coupon_template_id"/>
+        <result property="status"            column="status"/>
+        <result property="delFlag"           column="del_flag"/>
+        <result property="createBy"          column="create_by"/>
+        <result property="createTime"        column="create_time"/>
+        <result property="updateBy"          column="update_by"/>
+        <result property="updateTime"        column="update_time"/>
+        <result property="remark"            column="remark"/>
+    </resultMap>
+
+    <sql id="selectFishAdVo">
+        select ad_id, ad_type, title, description, image, bg_color, content, sort_num,
+               activity_name, activity_date, activity_location, activity_fee_cents, activity_slots, activity_rules,
+               coupon_template_id, status, del_flag, create_by, create_time, update_by, update_time, remark
+        from fish_ad
+    </sql>
+
+    <select id="selectFishAdList" parameterType="com.ruoyi.fishing.domain.FishAd" resultMap="FishAdResult">
+        <include refid="selectFishAdVo"/>
+        <where>
+            del_flag = '0'
+            <if test="adType != null and adType != ''">AND ad_type = #{adType}</if>
+            <if test="title != null and title != ''">AND title like concat('%', #{title}, '%')</if>
+            <if test="status != null and status != ''">AND status = #{status}</if>
+        </where>
+        order by sort_num asc, ad_id desc
+    </select>
+
+    <select id="selectFishAdByAdId" parameterType="Long" resultMap="FishAdResult">
+        <include refid="selectFishAdVo"/> where ad_id = #{adId} and del_flag = '0'
+    </select>
+
+    <insert id="insertFishAd" parameterType="com.ruoyi.fishing.domain.FishAd" useGeneratedKeys="true" keyProperty="adId">
+        insert into fish_ad
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="adType != null">ad_type,</if>
+            <if test="title != null">title,</if>
+            <if test="description != null">description,</if>
+            <if test="image != null">image,</if>
+            <if test="bgColor != null">bg_color,</if>
+            <if test="content != null">content,</if>
+            <if test="sortNum != null">sort_num,</if>
+            <if test="activityName != null">activity_name,</if>
+            <if test="activityDate != null">activity_date,</if>
+            <if test="activityLocation != null">activity_location,</if>
+            <if test="activityFeeCents != null">activity_fee_cents,</if>
+            <if test="activitySlots != null">activity_slots,</if>
+            <if test="activityRules != null">activity_rules,</if>
+            <if test="couponTemplateId != null">coupon_template_id,</if>
+            <if test="status != null">status,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="remark != null">remark,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="adType != null">#{adType},</if>
+            <if test="title != null">#{title},</if>
+            <if test="description != null">#{description},</if>
+            <if test="image != null">#{image},</if>
+            <if test="bgColor != null">#{bgColor},</if>
+            <if test="content != null">#{content},</if>
+            <if test="sortNum != null">#{sortNum},</if>
+            <if test="activityName != null">#{activityName},</if>
+            <if test="activityDate != null">#{activityDate},</if>
+            <if test="activityLocation != null">#{activityLocation},</if>
+            <if test="activityFeeCents != null">#{activityFeeCents},</if>
+            <if test="activitySlots != null">#{activitySlots},</if>
+            <if test="activityRules != null">#{activityRules},</if>
+            <if test="couponTemplateId != null">#{couponTemplateId},</if>
+            <if test="status != null">#{status},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="remark != null">#{remark},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateFishAd" parameterType="com.ruoyi.fishing.domain.FishAd">
+        update fish_ad
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="adType != null">ad_type = #{adType},</if>
+            <if test="title != null">title = #{title},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="image != null">image = #{image},</if>
+            <if test="bgColor != null">bg_color = #{bgColor},</if>
+            <if test="content != null">content = #{content},</if>
+            <if test="sortNum != null">sort_num = #{sortNum},</if>
+            <if test="activityName != null">activity_name = #{activityName},</if>
+            <if test="activityDate != null">activity_date = #{activityDate},</if>
+            <if test="activityLocation != null">activity_location = #{activityLocation},</if>
+            <if test="activityFeeCents != null">activity_fee_cents = #{activityFeeCents},</if>
+            <if test="activitySlots != null">activity_slots = #{activitySlots},</if>
+            <if test="activityRules != null">activity_rules = #{activityRules},</if>
+            <if test="couponTemplateId != null">coupon_template_id = #{couponTemplateId},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate()
+        </trim>
+        where ad_id = #{adId}
+    </update>
+
+    <update id="deleteFishAdByAdId" parameterType="Long">
+        update fish_ad set del_flag = '2' where ad_id = #{adId}
+    </update>
+
+    <update id="deleteFishAdByAdIds" parameterType="Long">
+        update fish_ad set del_flag = '2' where ad_id in
+        <foreach collection="array" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </update>
+</mapper>

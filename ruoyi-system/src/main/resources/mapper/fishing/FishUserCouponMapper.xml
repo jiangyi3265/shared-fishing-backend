@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishUserCouponMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishUserCoupon" id="FishUserCouponResult">
+        <id     property="couponId"        column="coupon_id"/>
+        <result property="templateId"      column="template_id"/>
+        <result property="userId"          column="user_id"/>
+        <result property="title"           column="title"/>
+        <result property="couponType"      column="coupon_type"/>
+        <result property="couponValue"     column="coupon_value"/>
+        <result property="minAmountCents"  column="min_amount_cents"/>
+        <result property="expireTime"      column="expire_time"/>
+        <result property="used"            column="used"/>
+        <result property="usedTime"        column="used_time"/>
+        <result property="orderId"         column="order_id"/>
+        <result property="source"          column="source"/>
+        <result property="createTime"      column="create_time"/>
+    </resultMap>
+
+    <sql id="selectVo">
+        select coupon_id, template_id, user_id, title, coupon_type, coupon_value, min_amount_cents,
+               expire_time, used, used_time, order_id, source, create_time
+        from fish_user_coupon
+    </sql>
+
+    <select id="selectFishUserCouponList" parameterType="com.ruoyi.fishing.domain.FishUserCoupon" resultMap="FishUserCouponResult">
+        <include refid="selectVo"/>
+        <where>
+            <if test="userId != null">AND user_id = #{userId}</if>
+            <if test="couponType != null and couponType != ''">AND coupon_type = #{couponType}</if>
+            <if test="used != null">AND used = #{used}</if>
+        </where>
+        order by coupon_id desc
+    </select>
+
+    <select id="selectFishUserCouponByCouponId" parameterType="Long" resultMap="FishUserCouponResult">
+        <include refid="selectVo"/> where coupon_id = #{couponId}
+    </select>
+
+    <select id="selectMyCoupons" resultMap="FishUserCouponResult">
+        <include refid="selectVo"/> where user_id = #{userId} order by used asc, coupon_id desc
+    </select>
+
+    <select id="selectAvailableCoupons" resultMap="FishUserCouponResult">
+        <include refid="selectVo"/>
+        where user_id = #{userId} and used = 0 and expire_time &gt; now()
+        order by coupon_id desc
+    </select>
+
+    <insert id="insertFishUserCoupon" parameterType="com.ruoyi.fishing.domain.FishUserCoupon" useGeneratedKeys="true" keyProperty="couponId">
+        insert into fish_user_coupon
+        (template_id, user_id, title, coupon_type, coupon_value, min_amount_cents, expire_time, used, source, create_time)
+        values
+        (#{templateId}, #{userId}, #{title}, #{couponType}, #{couponValue}, #{minAmountCents}, #{expireTime}, 0, #{source}, sysdate())
+    </insert>
+
+    <update id="updateFishUserCoupon" parameterType="com.ruoyi.fishing.domain.FishUserCoupon">
+        update fish_user_coupon
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="used != null">used = #{used},</if>
+            <if test="usedTime != null">used_time = #{usedTime},</if>
+            <if test="orderId != null">order_id = #{orderId},</if>
+            <if test="expireTime != null">expire_time = #{expireTime},</if>
+        </trim>
+        where coupon_id = #{couponId}
+    </update>
+
+    <update id="useCoupon">
+        update fish_user_coupon
+        set used = 1, used_time = sysdate(), order_id = #{orderId}
+        where coupon_id = #{couponId} and used = 0
+    </update>
+</mapper>

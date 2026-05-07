@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishDashboardMapper">
+
+    <select id="summaryToday" resultType="map">
+        select
+          count(*) as orderCount,
+          sum(case when status = 3 then 1 else 0 end) as paidCount,
+          coalesce(sum(case when status = 3 then amount_paid end), 0) as revenueCents,
+          coalesce(avg(case when status = 3 then duration_seconds end), 0) as avgDurationSeconds
+        from fish_order
+        where create_time &gt;= curdate()
+    </select>
+
+    <select id="summaryYesterday" resultType="map">
+        select
+          count(*) as orderCount,
+          coalesce(sum(case when status = 3 then amount_paid end), 0) as revenueCents
+        from fish_order
+        where create_time &gt;= date_sub(curdate(), interval 1 day)
+          and create_time &lt; curdate()
+    </select>
+
+    <select id="summaryMonth" resultType="map">
+        select
+          count(*) as orderCount,
+          coalesce(sum(case when status = 3 then amount_paid end), 0) as revenueCents
+        from fish_order
+        where create_time &gt;= date_format(curdate(), '%Y-%m-01')
+    </select>
+
+    <select id="activeStats" resultType="map">
+        select
+          sum(case when status = 1 then 1 else 0 end) as running,
+          sum(case when status = 2 then 1 else 0 end) as pending,
+          (select count(*) from fish_user where status = '0') as userCount
+        from fish_order
+    </select>
+
+    <select id="orderTrend" resultType="map">
+        select date_format(create_time, '%Y-%m-%d') as day,
+               count(*) as total,
+               sum(case when status = 3 then 1 else 0 end) as paid
+        from fish_order
+        where create_time &gt;= date_sub(curdate(), interval #{days} day)
+        group by day
+        order by day asc
+    </select>
+
+    <select id="revenueTrend" resultType="map">
+        select date_format(paid_time, '%Y-%m-%d') as day,
+               coalesce(sum(amount_paid), 0) as revenueCents
+        from fish_order
+        where status = 3 and paid_time &gt;= date_sub(curdate(), interval #{days} day)
+        group by day
+        order by day asc
+    </select>
+</mapper>

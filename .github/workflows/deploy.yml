@@ -1,0 +1,82 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  DEPLOY_DIR: /www/wwwroot/dyjava
+  JAR_NAME: ruoyi-admin.jar
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 8
+          cache: maven
+
+      - name: Build
+        run: mvn -B -DskipTests clean package
+
+      - name: Package artifact
+        run: |
+          mkdir -p deploy
+          cp "ruoyi-admin/target/${JAR_NAME}" "deploy/${JAR_NAME}"
+          tar -czf backend.tar.gz -C deploy "${JAR_NAME}"
+
+      - name: Install SSH helper
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Upload artifact
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          : "${SSH_HOST:?Missing SSH_HOST secret}"
+          : "${SSH_USER:?Missing SSH_USER secret}"
+          : "${SSH_PASSWORD:?Missing SSH_PASSWORD secret}"
+          SSH_PORT="${SSH_PORT:-22}"
+
+          sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_DIR}'"
+          sshpass -p "${SSH_PASSWORD}" scp -o StrictHostKeyChecking=no -P "${SSH_PORT}" backend.tar.gz "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/backend.tar.gz"
+
+      - name: Deploy and restart service
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          BACKEND_SERVICE: ${{ secrets.BACKEND_SERVICE }}
+        run: |
+          : "${SSH_HOST:?Missing SSH_HOST secret}"
+          : "${SSH_USER:?Missing SSH_USER secret}"
+          : "${SSH_PASSWORD:?Missing SSH_PASSWORD secret}"
+          SSH_PORT="${SSH_PORT:-22}"
+          SERVICE_NAME="${BACKEND_SERVICE:-fishing-backend}"
+
+          sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' SERVICE_NAME='${SERVICE_NAME}' bash -s" <<'EOF'
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          tar -xzf backend.tar.gz
+
+          if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${SERVICE_NAME}.service" --no-legend | grep -q "${SERVICE_NAME}.service"; then
+            systemctl restart "${SERVICE_NAME}.service"
+            systemctl status "${SERVICE_NAME}.service" --no-pager -l
+          else
+            echo "Jar uploaded to ${DEPLOY_DIR}/ruoyi-admin.jar."
+            echo "Systemd service ${SERVICE_NAME}.service was not found. Restart the backend manually or add BACKEND_SERVICE secret."
+          fi
+          EOF

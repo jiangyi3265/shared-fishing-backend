@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishQrcodeMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishQrcode" id="FishQrcodeResult">
+        <id     property="qrId"        column="qr_id"/>
+        <result property="venueId"     column="venue_id"/>
+        <result property="qrType"      column="qr_type"/>
+        <result property="sceneValue"  column="scene_value"/>
+        <result property="status"      column="status"/>
+        <result property="createBy"    column="create_by"/>
+        <result property="createTime"  column="create_time"/>
+        <result property="updateBy"    column="update_by"/>
+        <result property="updateTime"  column="update_time"/>
+        <result property="remark"      column="remark"/>
+    </resultMap>
+
+    <sql id="selectFishQrcodeVo">
+        select qr_id, venue_id, qr_type, scene_value, status, create_by, create_time, update_by, update_time, remark
+        from fish_qrcode
+    </sql>
+
+    <select id="selectFishQrcodeList" parameterType="com.ruoyi.fishing.domain.FishQrcode" resultMap="FishQrcodeResult">
+        <include refid="selectFishQrcodeVo"/>
+        <where>
+            <if test="venueId != null">AND venue_id = #{venueId}</if>
+            <if test="qrType != null and qrType != ''">AND qr_type = #{qrType}</if>
+            <if test="status != null and status != ''">AND status = #{status}</if>
+        </where>
+        order by qr_id desc
+    </select>
+
+    <select id="selectFishQrcodeByQrId" parameterType="Long" resultMap="FishQrcodeResult">
+        <include refid="selectFishQrcodeVo"/> where qr_id = #{qrId}
+    </select>
+
+    <select id="selectByVenueAndType" resultMap="FishQrcodeResult">
+        <include refid="selectFishQrcodeVo"/>
+        where venue_id = #{venueId} and qr_type = #{qrType} and status = '0' limit 1
+    </select>
+
+    <insert id="insertFishQrcode" parameterType="com.ruoyi.fishing.domain.FishQrcode" useGeneratedKeys="true" keyProperty="qrId">
+        insert into fish_qrcode (venue_id, qr_type, scene_value, status, create_by, create_time, remark)
+        values (#{venueId}, #{qrType}, #{sceneValue}, #{status}, #{createBy}, sysdate(), #{remark})
+    </insert>
+
+    <update id="updateFishQrcode" parameterType="com.ruoyi.fishing.domain.FishQrcode">
+        update fish_qrcode
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="venueId != null">venue_id = #{venueId},</if>
+            <if test="qrType != null">qr_type = #{qrType},</if>
+            <if test="sceneValue != null">scene_value = #{sceneValue},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate()
+        </trim>
+        where qr_id = #{qrId}
+    </update>
+
+    <delete id="deleteFishQrcodeByQrId" parameterType="Long">
+        delete from fish_qrcode where qr_id = #{qrId}
+    </delete>
+
+</mapper>

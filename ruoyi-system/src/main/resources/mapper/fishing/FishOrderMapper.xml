@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishOrderMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishOrder" id="FishOrderResult">
+        <id     property="orderId"         column="order_id"/>
+        <result property="orderNo"         column="order_no"/>
+        <result property="userId"          column="user_id"/>
+        <result property="venueId"         column="venue_id"/>
+        <result property="status"          column="status"/>
+        <result property="startTime"       column="start_time"/>
+        <result property="endTime"         column="end_time"/>
+        <result property="durationSeconds" column="duration_seconds"/>
+        <result property="elapsedSeconds"  column="elapsed_seconds"/>
+        <result property="amountCents"     column="amount_cents"/>
+        <result property="discountCents"   column="discount_cents"/>
+        <result property="amountPaid"      column="amount_paid"/>
+        <result property="couponId"        column="coupon_id"/>
+        <result property="paidTime"        column="paid_time"/>
+        <result property="payTradeNo"      column="pay_trade_no"/>
+        <result property="ruleSnapshot"    column="rule_snapshot"/>
+        <result property="cancelReason"    column="cancel_reason"/>
+        <result property="createBy"        column="create_by"/>
+        <result property="createTime"      column="create_time"/>
+        <result property="updateBy"        column="update_by"/>
+        <result property="updateTime"      column="update_time"/>
+        <result property="venueName"       column="venue_name"/>
+        <result property="nickname"        column="nickname"/>
+    </resultMap>
+
+    <sql id="selectFishOrderVo">
+        select o.order_id, o.order_no, o.user_id, o.venue_id, o.status, o.start_time, o.end_time,
+               o.duration_seconds, o.elapsed_seconds, o.amount_cents, o.discount_cents, o.amount_paid,
+               o.coupon_id, o.paid_time, o.pay_trade_no, o.rule_snapshot, o.cancel_reason,
+               o.create_by, o.create_time, o.update_by, o.update_time,
+               v.name as venue_name, u.nickname as nickname
+        from fish_order o
+        left join fish_venue v on o.venue_id = v.venue_id
+        left join fish_user  u on o.user_id  = u.user_id
+    </sql>
+
+    <select id="selectFishOrderList" parameterType="com.ruoyi.fishing.domain.FishOrder" resultMap="FishOrderResult">
+        <include refid="selectFishOrderVo"/>
+        <where>
+            <if test="orderNo != null and orderNo != ''">AND o.order_no like concat('%', #{orderNo}, '%')</if>
+            <if test="userId != null">AND o.user_id = #{userId}</if>
+            <if test="venueId != null">AND o.venue_id = #{venueId}</if>
+            <if test="status != null">AND o.status = #{status}</if>
+            <if test="params.beginTime != null and params.beginTime != ''">
+                AND o.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params.endTime != null and params.endTime != ''">
+                AND o.create_time &lt;= #{params.endTime}
+            </if>
+        </where>
+        order by o.order_id desc
+    </select>
+
+    <select id="selectFishOrderByOrderId" parameterType="Long" resultMap="FishOrderResult">
+        <include refid="selectFishOrderVo"/>
+        where o.order_id = #{orderId}
+    </select>
+
+    <select id="selectFishOrderByOrderNo" parameterType="String" resultMap="FishOrderResult">
+        <include refid="selectFishOrderVo"/>
+        where o.order_no = #{orderNo}
+    </select>
+
+    <select id="selectRunningOrder" resultMap="FishOrderResult">
+        <include refid="selectFishOrderVo"/>
+        where o.user_id = #{userId} and o.status = 1 limit 1
+    </select>
+
+    <select id="selectPendingOrder" resultMap="FishOrderResult">
+        <include refid="selectFishOrderVo"/>
+        where o.user_id = #{userId} and o.status in (0, 2) order by o.order_id desc limit 1
+    </select>
+
+    <select id="selectOrdersByUser" resultMap="FishOrderResult">
+        <include refid="selectFishOrderVo"/>
+        where o.user_id = #{userId}
+        order by o.order_id desc
+    </select>
+
+    <insert id="insertFishOrder" parameterType="com.ruoyi.fishing.domain.FishOrder" useGeneratedKeys="true" keyProperty="orderId">
+        insert into fish_order
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            order_no, user_id, venue_id, status,
+            <if test="startTime != null">start_time,</if>
+            <if test="endTime != null">end_time,</if>
+            <if test="durationSeconds != null">duration_seconds,</if>
+            <if test="elapsedSeconds != null">elapsed_seconds,</if>
+            <if test="amountCents != null">amount_cents,</if>
+            <if test="discountCents != null">discount_cents,</if>
+            <if test="amountPaid != null">amount_paid,</if>
+            <if test="couponId != null">coupon_id,</if>
+            <if test="ruleSnapshot != null">rule_snapshot,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            #{orderNo}, #{userId}, #{venueId}, #{status},
+            <if test="startTime != null">#{startTime},</if>
+            <if test="endTime != null">#{endTime},</if>
+            <if test="durationSeconds != null">#{durationSeconds},</if>
+            <if test="elapsedSeconds != null">#{elapsedSeconds},</if>
+            <if test="amountCents != null">#{amountCents},</if>
+            <if test="discountCents != null">#{discountCents},</if>
+            <if test="amountPaid != null">#{amountPaid},</if>
+            <if test="couponId != null">#{couponId},</if>
+            <if test="ruleSnapshot != null">#{ruleSnapshot},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateFishOrder" parameterType="com.ruoyi.fishing.domain.FishOrder">
+        update fish_order
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="status != null">status = #{status},</if>
+            <if test="startTime != null">start_time = #{startTime},</if>
+            <if test="endTime != null">end_time = #{endTime},</if>
+            <if test="durationSeconds != null">duration_seconds = #{durationSeconds},</if>
+            <if test="elapsedSeconds != null">elapsed_seconds = #{elapsedSeconds},</if>
+            <if test="amountCents != null">amount_cents = #{amountCents},</if>
+            <if test="discountCents != null">discount_cents = #{discountCents},</if>
+            <if test="amountPaid != null">amount_paid = #{amountPaid},</if>
+            <if test="couponId != null">coupon_id = #{couponId},</if>
+            <if test="paidTime != null">paid_time = #{paidTime},</if>
+            <if test="payTradeNo != null">pay_trade_no = #{payTradeNo},</if>
+            <if test="ruleSnapshot != null">rule_snapshot = #{ruleSnapshot},</if>
+            <if test="cancelReason != null">cancel_reason = #{cancelReason},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            update_time = sysdate()
+        </trim>
+        where order_id = #{orderId}
+    </update>
+
+    <update id="updateOrderStatusWithGuard">
+        update fish_order set status = #{newStatus}, update_time = sysdate()
+        where order_id = #{orderId} and status = #{expectedStatus}
+    </update>
+
+    <delete id="deleteFishOrderByOrderId" parameterType="Long">
+        delete from fish_order where order_id = #{orderId}
+    </delete>
+
+    <delete id="deleteFishOrderByOrderIds" parameterType="Long">
+        delete from fish_order where order_id in
+        <foreach collection="array" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </delete>
+
+</mapper>
