@@ -38,12 +38,12 @@ public class WxAuthServiceImpl implements IWxAuthService
             return "mock_" + code;
         }
 
-        String url = mp.getCode2sessionUrl()
-                + "?appid=" + URLEncoder.encode(mp.getAppid(), StandardCharsets.UTF_8)
-                + "&secret=" + URLEncoder.encode(mp.getSecret(), StandardCharsets.UTF_8)
-                + "&js_code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
-                + "&grant_type=authorization_code";
         try {
+            String url = mp.getCode2sessionUrl()
+                    + "?appid=" + URLEncoder.encode(mp.getAppid(), StandardCharsets.UTF_8.name())
+                    + "&secret=" + URLEncoder.encode(mp.getSecret(), StandardCharsets.UTF_8.name())
+                    + "&js_code=" + URLEncoder.encode(code, StandardCharsets.UTF_8.name())
+                    + "&grant_type=authorization_code";
             ResponseEntity<String> res = restTemplate.getForEntity(url, String.class);
             JsonNode node = mapper.readTree(res.getBody());
             String openid = node.path("openid").asText(null);
