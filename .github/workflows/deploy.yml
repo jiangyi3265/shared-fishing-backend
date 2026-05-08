@@ -36,6 +36,7 @@ jobs:
           mkdir -p deploy
           cp "ruoyi-admin/target/${JAR_NAME}" "deploy/${JAR_NAME}"
           tar -czf backend.tar.gz -C deploy "${JAR_NAME}"
+          ls -lh backend.tar.gz
 
       - name: Install SSH helper
         run: |
@@ -54,7 +55,7 @@ jobs:
           : "${SSH_USER:?Missing SSH_USER secret}"
           : "${SSH_PASSWORD:?Missing SSH_PASSWORD secret}"
           SSH_PORT="${SSH_PORT:-22}"
-          SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -C"
+          SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_DIR}'"
           sshpass -p "${SSH_PASSWORD}" scp ${SSH_OPTS} -P "${SSH_PORT}" backend.tar.gz "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/backend.tar.gz"
@@ -73,7 +74,7 @@ jobs:
           : "${SSH_PASSWORD:?Missing SSH_PASSWORD secret}"
           SSH_PORT="${SSH_PORT:-22}"
           SERVICE_NAME="${BACKEND_SERVICE:-fishing-backend}"
-          SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -C"
+          SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' SERVICE_NAME='${SERVICE_NAME}' bash -s" <<'EOF'
           set -euo pipefail
