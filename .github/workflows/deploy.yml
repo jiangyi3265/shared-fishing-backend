@@ -35,13 +35,12 @@ jobs:
         run: |
           mkdir -p deploy
           cp "ruoyi-admin/target/${JAR_NAME}" "deploy/${JAR_NAME}"
-          tar -czf backend.tar.gz -C deploy "${JAR_NAME}"
-          ls -lh backend.tar.gz
+          ls -lh "deploy/${JAR_NAME}"
 
       - name: Install SSH helper
         run: |
           sudo apt-get update
-          sudo apt-get install -y sshpass
+          sudo apt-get install -y sshpass rsync
 
       - name: Upload artifact
         timeout-minutes: 25
@@ -56,9 +55,15 @@ jobs:
           : "${SSH_PASSWORD:?Missing SSH_PASSWORD secret}"
           SSH_PORT="${SSH_PORT:-22}"
           SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_CMD="ssh ${SSH_OPTS} -p ${SSH_PORT}"
 
           sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_DIR}'"
-          sshpass -p "${SSH_PASSWORD}" scp ${SSH_OPTS} -P "${SSH_PORT}" backend.tar.gz "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/backend.tar.gz"
+          if sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "command -v rsync >/dev/null 2>&1"; then
+            sshpass -p "${SSH_PASSWORD}" rsync -av --partial --delay-updates --info=progress2,stats2 -e "${SSH_CMD}" "deploy/${JAR_NAME}" "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/${JAR_NAME}"
+          else
+            echo "Remote rsync not found, falling back to scp."
+            sshpass -p "${SSH_PASSWORD}" scp ${SSH_OPTS} -P "${SSH_PORT}" "deploy/${JAR_NAME}" "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/${JAR_NAME}.upload"
+          fi
 
       - name: Deploy and restart service
         timeout-minutes: 5
@@ -76,10 +81,13 @@ jobs:
           SERVICE_NAME="${BACKEND_SERVICE:-fishing-backend}"
           SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
-          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' SERVICE_NAME='${SERVICE_NAME}' bash -s" <<'EOF'
+          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' JAR_NAME='${JAR_NAME}' SERVICE_NAME='${SERVICE_NAME}' bash -s" <<'EOF'
           set -euo pipefail
           cd "${DEPLOY_DIR}"
-          tar -xzf backend.tar.gz
+          if [ -f "${JAR_NAME}.upload" ]; then
+            mv "${JAR_NAME}.upload" "${JAR_NAME}"
+          fi
+          ls -lh "${JAR_NAME}"
 
           if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${SERVICE_NAME}.service" --no-legend | grep -q "${SERVICE_NAME}.service"; then
             systemctl restart "${SERVICE_NAME}.service"
