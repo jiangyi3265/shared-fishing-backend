@@ -4,6 +4,7 @@ import java.util.Date;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.fishing.domain.FishAd;
 import com.ruoyi.fishing.domain.FishRegistration;
@@ -30,6 +31,7 @@ public class FishRegistrationServiceImpl implements IFishRegistrationService
     public List<FishRegistration> selectByUserId(Long userId) { return regMapper.selectByUserId(userId); }
 
     @Override
+    @Transactional
     public FishRegistration submit(Long adId, Long userId, String name, String phone, String remark)
     {
         FishAd ad = adMapper.selectFishAdByAdId(adId);
@@ -38,6 +40,14 @@ public class FishRegistrationServiceImpl implements IFishRegistrationService
 
         FishRegistration existing = regMapper.selectByAdAndUser(adId, userId);
         if (existing != null) return existing;
+
+        if (ad.getActivitySlots() != null && ad.getActivitySlots() > 0)
+        {
+            FishRegistration query = new FishRegistration();
+            query.setAdId(adId);
+            int count = regMapper.selectFishRegistrationList(query).size();
+            if (count >= ad.getActivitySlots()) throw new ServiceException("报名人数已满");
+        }
 
         FishRegistration r = new FishRegistration();
         r.setAdId(adId);

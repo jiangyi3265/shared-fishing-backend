@@ -4,6 +4,7 @@ import java.util.Date;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
@@ -67,12 +68,13 @@ public class FishCouponServiceImpl implements IFishCouponService
     }
 
     @Override
+    @Transactional
     public FishUserCoupon grantCoupon(Long userId, Long templateId, String source) {
         FishCouponTemplate t = templateMapper.selectFishCouponTemplateByTemplateId(templateId);
         if (t == null) throw new ServiceException("优惠券模板不存在");
         if ("1".equals(t.getStatus())) throw new ServiceException("该优惠券已停用");
-        if (t.getTotalStock() != null && t.getTotalStock() > 0
-                && t.getIssuedCount() != null && t.getIssuedCount() >= t.getTotalStock()) {
+        int issued = t.getIssuedCount() == null ? 0 : t.getIssuedCount();
+        if (t.getTotalStock() != null && t.getTotalStock() > 0 && issued >= t.getTotalStock()) {
             throw new ServiceException("优惠券已领完");
         }
         FishUserCoupon c = new FishUserCoupon();
@@ -88,7 +90,7 @@ public class FishCouponServiceImpl implements IFishCouponService
         c.setSource(source == null ? "" : source);
         userCouponMapper.insertFishUserCoupon(c);
 
-        t.setIssuedCount((t.getIssuedCount() == null ? 0 : t.getIssuedCount()) + 1);
+        t.setIssuedCount(issued + 1);
         templateMapper.updateFishCouponTemplate(t);
         return c;
     }

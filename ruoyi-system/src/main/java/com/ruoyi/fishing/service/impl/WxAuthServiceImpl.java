@@ -29,13 +29,17 @@ public class WxAuthServiceImpl implements IWxAuthService
     public String resolveOpenid(String code)
     {
         if (code == null || code.isEmpty()) throw new ServiceException("缺少登录 code");
-        if (code.startsWith("mock_")) return code;
 
         WxProperties.Miniapp mp = wxProperties.getMiniapp();
-        if (mp.getAppid() == null || mp.getSecret() == null
-                || "please-replace-me".equals(mp.getSecret())) {
-            log.warn("微信小程序未配置 appid/secret，使用 mock openid");
-            return "mock_" + code;
+        if (mp.isMockEnabled() && code.startsWith("mock_")) return code;
+        boolean missingCredentials = isBlank(mp.getAppid()) || isBlank(mp.getSecret())
+                || "please-replace-me".equals(mp.getSecret());
+        if (missingCredentials) {
+            if (mp.isMockEnabled()) {
+                log.warn("微信小程序未配置 appid/secret，开发模式使用固定 mock openid");
+                return "mock_openid_dev";
+            }
+            throw new ServiceException("微信小程序 AppSecret 未配置");
         }
 
         try {
@@ -57,5 +61,10 @@ public class WxAuthServiceImpl implements IWxAuthService
             log.error("调用 jscode2session 失败", e);
             throw new ServiceException("微信登录失败，请稍后重试");
         }
+    }
+
+    private boolean isBlank(String value)
+    {
+        return value == null || value.trim().isEmpty();
     }
 }

@@ -20,6 +20,9 @@ public interface IFishOrderService
     /** 支付 */
     public FishOrder pay(Long userId, Long orderId, Long couponId);
 
+    /** 应用优惠券并计算实付金额（不改变订单状态，用于微信预支付） */
+    public FishOrder preparePayment(Long userId, Long orderId, Long couponId);
+
     /** 微信异步通知回调后置为已支付（幂等） */
     public FishOrder markPaid(String orderNo, String tradeNo);
 

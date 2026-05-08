@@ -13,11 +13,8 @@ import com.ruoyi.fishing.service.IWxPayService;
 /**
  * 微信支付 V3 JSAPI 服务
  *
- * 通过反射调用 wechatpay-java SDK（可选依赖），这样即使构建环境无法联网拉取 SDK，
- * 项目也能编译运行，只是走 mock 通道。上线前：
- *   1. 在 ruoyi-system/pom.xml 保留 wechatpay-java 依赖（已添加）
- *   2. 配置 WX_PAY_* 环境变量
- *   3. WX_PAY_ENABLED=true
+ * 通过反射调用 wechatpay-java SDK。开发环境可以关闭真实支付走 mock；
+ * 生产环境只要 WX_PAY_ENABLED=true，SDK 或商户配置异常都会直接失败。
  *
  * 参考 SDK：https://github.com/wechatpay-apiv3/wechatpay-java
  */
@@ -35,6 +32,9 @@ public class WxPayServiceImpl implements IWxPayService
 
     @Override
     public boolean isEnabled() { return wxProperties.getPay().isEnabled(); }
+
+    @Override
+    public boolean isMockEnabled() { return wxProperties.getPay().isMockEnabled(); }
 
     private synchronized void ensureInit()
     {
@@ -62,9 +62,11 @@ public class WxPayServiceImpl implements IWxPayService
             initialized = true;
             log.info("WxPay SDK 初始化成功");
         } catch (ClassNotFoundException e) {
-            log.warn("wechatpay-java SDK 未在 classpath 中，使用 mock 通道。引入依赖重新构建后生效。");
+            log.error("wechatpay-java SDK 未在 classpath 中", e);
+            throw new ServiceException("微信支付 SDK 未安装");
         } catch (Throwable t) {
-            log.error("微信支付初始化失败，降级为 mock", t);
+            log.error("微信支付初始化失败", t);
+            throw new ServiceException("微信支付初始化失败");
         }
     }
 
@@ -75,6 +77,7 @@ public class WxPayServiceImpl implements IWxPayService
         ensureInit();
         if (!initialized)
         {
+            if (isEnabled() || !isMockEnabled()) throw new ServiceException("微信支付未初始化");
             resp.put("mock", true);
             resp.put("tradeNo", "MOCK" + System.currentTimeMillis());
             resp.put("prepayId", "mock_prepay_" + orderNo);
@@ -129,10 +132,10 @@ public class WxPayServiceImpl implements IWxPayService
         try {
             Class<?> reqCls = Class.forName("com.wechat.pay.java.core.notification.RequestParam$Builder");
             Object b = reqCls.getDeclaredConstructor().newInstance();
-            reqCls.getMethod("serialNumber", String.class).invoke(b, headers.getOrDefault("Wechatpay-Serial", ""));
-            reqCls.getMethod("nonce", String.class).invoke(b, headers.getOrDefault("Wechatpay-Nonce", ""));
-            reqCls.getMethod("signature", String.class).invoke(b, headers.getOrDefault("Wechatpay-Signature", ""));
-            reqCls.getMethod("timestamp", String.class).invoke(b, headers.getOrDefault("Wechatpay-Timestamp", ""));
+            reqCls.getMethod("serialNumber", String.class).invoke(b, header(headers, "Wechatpay-Serial"));
+            reqCls.getMethod("nonce", String.class).invoke(b, header(headers, "Wechatpay-Nonce"));
+            reqCls.getMethod("signature", String.class).invoke(b, header(headers, "Wechatpay-Signature"));
+            reqCls.getMethod("timestamp", String.class).invoke(b, header(headers, "Wechatpay-Timestamp"));
             reqCls.getMethod("body", String.class).invoke(b, body);
             Object param = reqCls.getMethod("build").invoke(b);
 
@@ -150,5 +153,18 @@ public class WxPayServiceImpl implements IWxPayService
     private Object invoke(Object target, String method) throws Exception
     {
         return target.getClass().getMethod(method).invoke(target);
+    }
+
+    private String header(Map<String, String> headers, String name)
+    {
+        String exact = headers.get(name);
+        if (exact != null) return exact;
+        String lower = headers.get(name.toLowerCase());
+        if (lower != null) return lower;
+        for (Map.Entry<String, String> entry : headers.entrySet())
+        {
+            if (name.equalsIgnoreCase(entry.getKey())) return entry.getValue();
+        }
+        return "";
     }
 }

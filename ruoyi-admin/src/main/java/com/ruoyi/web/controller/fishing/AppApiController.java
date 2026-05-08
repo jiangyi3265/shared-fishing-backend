@@ -16,6 +16,7 @@ import com.ruoyi.fishing.domain.FishUser;
 import com.ruoyi.fishing.domain.FishUserCoupon;
 import com.ruoyi.fishing.domain.FishVenue;
 import com.ruoyi.fishing.mapper.FishQrcodeMapper;
+import com.ruoyi.fishing.service.AppTokenService;
 import com.ruoyi.fishing.service.IFishAdService;
 import com.ruoyi.fishing.service.IFishBillingRuleService;
 import com.ruoyi.fishing.service.IFishCouponService;
@@ -28,7 +29,6 @@ import com.ruoyi.fishing.service.IWxPayService;
 
 /**
  * 小程序端开放接口
- * 鉴权简化：以 userId 识别身份，生产建议替换为基于 token 的会话
  */
 @RestController
 @RequestMapping("/app")
@@ -54,6 +54,10 @@ public class AppApiController
     private IWxPayService wxPayService;
     @Autowired
     private FishQrcodeMapper qrcodeMapper;
+    @Autowired
+    private AppTokenService appTokenService;
+    @Autowired
+    private HttpServletRequest request;
 
     /** 小程序登录：前端传 code（uni.login 获得），后端走 code2session 换 openid */
     @Anonymous
@@ -62,17 +66,13 @@ public class AppApiController
     {
         String code = body.get("code");
         String openid;
-        if (code != null && !code.isEmpty()) {
-            openid = wxAuthService.resolveOpenid(code);
-        } else {
-            // 兼容旧客户端，降级为 openid 直传
-            openid = body.getOrDefault("openid", "mock_" + System.currentTimeMillis());
-        }
+        if (code == null || code.isEmpty()) return AjaxResult.error("缺少微信登录 code");
+        openid = wxAuthService.resolveOpenid(code);
         FishUser u = userService.loginOrRegister(openid, body.get("nickname"), body.get("avatar"));
         Map<String, Object> data = new HashMap<>();
         data.put("userId", u.getUserId());
         data.put("user", u);
-        data.put("token", "mock-" + u.getUserId());
+        data.put("token", appTokenService.createToken(u.getUserId()));
         return AjaxResult.success(data);
     }
 
@@ -124,9 +124,11 @@ public class AppApiController
     @PostMapping("/order/start")
     public AjaxResult startOrder(@RequestBody Map<String, Object> body)
     {
-        Long userId = parseLong(body.get("userId"));
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        Long bodyUserId = parseLong(body.get("userId"));
+        if (bodyUserId != null && !bodyUserId.equals(userId)) return unauthorized();
         Long venueId = parseLong(body.get("venueId"));
-        if (userId == null) return AjaxResult.error("未登录");
         if (venueId == null)
         {
             List<FishVenue> all = venueService.selectFishVenueList(new FishVenue());
@@ -141,6 +143,7 @@ public class AppApiController
     @GetMapping("/order/running")
     public AjaxResult running(@RequestParam Long userId)
     {
+        if (!isCurrentUser(userId)) return unauthorized();
         return AjaxResult.success(orderService.estimateRunning(userId));
     }
 
@@ -149,6 +152,7 @@ public class AppApiController
     @GetMapping("/order/pending")
     public AjaxResult pending(@RequestParam Long userId)
     {
+        if (!isCurrentUser(userId)) return unauthorized();
         return AjaxResult.success(orderService.selectPendingOrder(userId));
     }
 
@@ -157,8 +161,10 @@ public class AppApiController
     @PostMapping("/order/finish")
     public AjaxResult finishOrder(@RequestBody Map<String, Object> body)
     {
-        Long userId = parseLong(body.get("userId"));
-        if (userId == null) return AjaxResult.error("未登录");
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        Long bodyUserId = parseLong(body.get("userId"));
+        if (bodyUserId != null && !bodyUserId.equals(userId)) return unauthorized();
         return AjaxResult.success(orderService.finishOrder(userId));
     }
 
@@ -171,24 +177,36 @@ public class AppApiController
         Long orderId = parseLong(body.get("orderId"));
         Long couponId = parseLong(body.get("couponId"));
         if (userId == null || orderId == null) return AjaxResult.error("参数缺失");
+        if (!isCurrentUser(userId)) return unauthorized();
 
         FishOrder order = orderService.selectFishOrderByOrderId(orderId);
         if (order == null) return AjaxResult.error("订单不存在");
+        if (!userId.equals(order.getUserId())) return unauthorized();
 
         if (wxPayService.isEnabled())
         {
             FishUser user = userService.selectFishUserByUserId(userId);
             if (user == null) return AjaxResult.error("用户不存在");
-            int finalAmount = order.getAmountCents() == null ? 0 : order.getAmountCents();
-            Map<String, Object> prepay = wxPayService.createPrepay(order.getOrderNo(), finalAmount, user.getOpenid(),
-                    "共享钓场 · " + order.getOrderNo());
+            FishOrder prepared = orderService.preparePayment(userId, orderId, couponId);
+            int finalAmount = prepared.getAmountPaid() == null ? 0 : prepared.getAmountPaid();
+            if (finalAmount <= 0)
+            {
+                orderService.markPaid(prepared.getOrderNo(), "ZERO_PAY");
+                Map<String, Object> data = new HashMap<>();
+                data.put("order", prepared);
+                data.put("needWxPay", false);
+                return AjaxResult.success(data);
+            }
+            Map<String, Object> prepay = wxPayService.createPrepay(prepared.getOrderNo(), finalAmount, user.getOpenid(),
+                    "共享钓场 · " + prepared.getOrderNo());
             Map<String, Object> data = new HashMap<>();
-            data.put("order", order);
+            data.put("order", prepared);
             data.put("pay", prepay);
             data.put("needWxPay", true);
             return AjaxResult.success(data);
         }
 
+        if (!wxPayService.isMockEnabled()) return AjaxResult.error("微信支付未配置");
         FishOrder paid = orderService.pay(userId, orderId, couponId);
         Map<String, Object> data = new HashMap<>();
         data.put("order", paid);
@@ -243,6 +261,7 @@ public class AppApiController
     @GetMapping("/order/list")
     public AjaxResult orderList(@RequestParam Long userId)
     {
+        if (!isCurrentUser(userId)) return unauthorized();
         return AjaxResult.success(orderService.selectOrdersByUser(userId));
     }
 
@@ -251,7 +270,12 @@ public class AppApiController
     @GetMapping("/order/{orderId}")
     public AjaxResult orderDetail(@PathVariable Long orderId)
     {
-        return AjaxResult.success(orderService.selectFishOrderByOrderId(orderId));
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        FishOrder order = orderService.selectFishOrderByOrderId(orderId);
+        if (order == null) return AjaxResult.error("订单不存在");
+        if (!userId.equals(order.getUserId())) return unauthorized();
+        return AjaxResult.success(order);
     }
 
     /** 活动报名 */
@@ -265,6 +289,7 @@ public class AppApiController
         String phone = (String) body.get("phone");
         String remark = (String) body.get("remark");
         if (userId == null || adId == null) return AjaxResult.error("参数缺失");
+        if (!isCurrentUser(userId)) return unauthorized();
         FishRegistration r = regService.submit(adId, userId, name, phone, remark);
         return AjaxResult.success(r);
     }
@@ -276,6 +301,15 @@ public class AppApiController
     {
         Long regId = parseLong(body.get("regId"));
         if (regId == null) return AjaxResult.error("参数缺失");
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        FishRegistration reg = regService.selectFishRegistrationByRegId(regId);
+        if (reg == null) return AjaxResult.error("报名不存在");
+        if (!userId.equals(reg.getUserId())) return unauthorized();
+        if (reg.getFeeCents() != null && reg.getFeeCents() > 0 && !wxPayService.isMockEnabled())
+        {
+            return AjaxResult.error("活动报名支付未配置");
+        }
         return AjaxResult.success(regService.pay(regId));
     }
 
@@ -284,6 +318,7 @@ public class AppApiController
     @GetMapping("/registration/my")
     public AjaxResult myReg(@RequestParam Long userId)
     {
+        if (!isCurrentUser(userId)) return unauthorized();
         return AjaxResult.success(regService.selectByUserId(userId));
     }
 
@@ -296,6 +331,7 @@ public class AppApiController
         Long templateId = parseLong(body.get("templateId"));
         String source = (String) body.get("source");
         if (userId == null || templateId == null) return AjaxResult.error("参数缺失");
+        if (!isCurrentUser(userId)) return unauthorized();
         FishUserCoupon c = couponService.grantCoupon(userId, templateId, source == null ? "app" : source);
         return AjaxResult.success(c);
     }
@@ -305,6 +341,7 @@ public class AppApiController
     @GetMapping("/coupon/my")
     public AjaxResult myCoupons(@RequestParam Long userId)
     {
+        if (!isCurrentUser(userId)) return unauthorized();
         return AjaxResult.success(couponService.selectMyCoupons(userId));
     }
 
@@ -313,6 +350,7 @@ public class AppApiController
     @GetMapping("/coupon/available")
     public AjaxResult availableCoupons(@RequestParam Long userId)
     {
+        if (!isCurrentUser(userId)) return unauthorized();
         return AjaxResult.success(couponService.selectAvailableCoupons(userId));
     }
 
@@ -321,5 +359,21 @@ public class AppApiController
         if (v == null) return null;
         if (v instanceof Number) return ((Number) v).longValue();
         try { return Long.parseLong(String.valueOf(v)); } catch (Exception e) { return null; }
+    }
+
+    private Long currentUserId()
+    {
+        return appTokenService.resolveUserId(request.getHeader("Authorization"));
+    }
+
+    private boolean isCurrentUser(Long userId)
+    {
+        Long current = currentUserId();
+        return current != null && current.equals(userId);
+    }
+
+    private AjaxResult unauthorized()
+    {
+        return AjaxResult.error(401, "请先登录");
     }
 }

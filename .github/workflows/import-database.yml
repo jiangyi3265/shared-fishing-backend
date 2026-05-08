@@ -82,10 +82,6 @@ jobs:
             CANDIDATES="${CANDIDATES}${DB_USER}	${DB_PASSWORD}
           "
           fi
-          CANDIDATES="${CANDIDATES}root	123456
-          root	
-          "
-
           PY_BIN="$(command -v python3 || command -v python || true)"
           if [ -z "${PY_BIN}" ] && [ -x /www/server/panel/pyenv/bin/python ]; then
             PY_BIN=/www/server/panel/pyenv/bin/python

@@ -23,12 +23,11 @@
             <artifactId>ruoyi-common</artifactId>
         </dependency>
 
-        <!-- 微信支付 V3 官方 SDK；离线打包若无网可注释，降级使用 mock 通道 -->
+        <!-- 微信支付 V3 官方 SDK -->
         <dependency>
             <groupId>com.github.wechatpay-apiv3</groupId>
             <artifactId>wechatpay-java</artifactId>
             <version>0.2.14</version>
-            <optional>true</optional>
         </dependency>
 
     </dependencies>

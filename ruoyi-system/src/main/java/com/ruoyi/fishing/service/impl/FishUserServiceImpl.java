@@ -34,7 +34,8 @@ public class FishUserServiceImpl implements IFishUserService
             if (nickname != null && !nickname.equals(existing.getNickname())) { existing.setNickname(nickname); dirty = true; }
             if (avatar != null && !avatar.equals(existing.getAvatar())) { existing.setAvatar(avatar); dirty = true; }
             existing.setLastLoginTime(DateUtils.getNowDate());
-            if (dirty || true) userMapper.updateFishUser(existing);
+            dirty = true;
+            if (dirty) userMapper.updateFishUser(existing);
             return existing;
         }
         FishUser u = new FishUser();

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,13 +30,14 @@ import io.swagger.annotations.ApiOperation;
  */
 @Api("用户信息管理")
 @RestController
+@ConditionalOnProperty(name = "demo.enabled", havingValue = "true")
 @RequestMapping("/test/user")
 public class TestController extends BaseController
 {
     private final static Map<Integer, UserEntity> users = new LinkedHashMap<Integer, UserEntity>();
     {
-        users.put(1, new UserEntity(1, "admin", "admin123", "15888888888"));
-        users.put(2, new UserEntity(2, "ry", "admin123", "15666666666"));
+        users.put(1, new UserEntity(1, "demo_admin", "demo-password", "15888888888"));
+        users.put(2, new UserEntity(2, "demo_user", "demo-password", "15666666666"));
     }
 
     @ApiOperation("获取用户列表")

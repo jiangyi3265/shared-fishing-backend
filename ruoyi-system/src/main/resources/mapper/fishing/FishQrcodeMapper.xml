@@ -25,6 +25,7 @@
         <where>
             <if test="venueId != null">AND venue_id = #{venueId}</if>
             <if test="qrType != null and qrType != ''">AND qr_type = #{qrType}</if>
+            <if test="sceneValue != null and sceneValue != ''">AND scene_value = #{sceneValue}</if>
             <if test="status != null and status != ''">AND status = #{status}</if>
         </where>
         order by qr_id desc

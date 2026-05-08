@@ -20,6 +20,8 @@ public class WxProperties
         private String appid;
         private String secret;
         private String code2sessionUrl = "https://api.weixin.qq.com/sns/jscode2session";
+        private boolean mockEnabled;
+        private int tokenExpireDays = 30;
 
         public String getAppid() { return appid; }
         public void setAppid(String appid) { this.appid = appid; }
@@ -27,11 +29,16 @@ public class WxProperties
         public void setSecret(String secret) { this.secret = secret; }
         public String getCode2sessionUrl() { return code2sessionUrl; }
         public void setCode2sessionUrl(String code2sessionUrl) { this.code2sessionUrl = code2sessionUrl; }
+        public boolean isMockEnabled() { return mockEnabled; }
+        public void setMockEnabled(boolean mockEnabled) { this.mockEnabled = mockEnabled; }
+        public int getTokenExpireDays() { return tokenExpireDays; }
+        public void setTokenExpireDays(int tokenExpireDays) { this.tokenExpireDays = tokenExpireDays; }
     }
 
     public static class Pay
     {
         private boolean enabled;
+        private boolean mockEnabled;
         private String mchId;
         private String apiV3Key;
         private String notifyUrl;
@@ -40,6 +47,8 @@ public class WxProperties
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public boolean isMockEnabled() { return mockEnabled; }
+        public void setMockEnabled(boolean mockEnabled) { this.mockEnabled = mockEnabled; }
         public String getMchId() { return mchId; }
         public void setMchId(String mchId) { this.mchId = mchId; }
         public String getApiV3Key() { return apiV3Key; }

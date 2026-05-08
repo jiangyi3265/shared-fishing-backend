@@ -107,7 +107,9 @@ CREATE TABLE `fish_order` (
   PRIMARY KEY (`order_id`),
   UNIQUE KEY `uk_order_no` (`order_no`),
   KEY `idx_user_status` (`user_id`, `status`),
-  KEY `idx_venue` (`venue_id`)
+  KEY `idx_venue` (`venue_id`),
+  KEY `idx_create_time` (`create_time`),
+  KEY `idx_paid_time` (`paid_time`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 COMMENT='钓场订单';
 
 -- 广告/活动
@@ -267,3 +269,12 @@ INSERT INTO sys_dict_data VALUES (521, 2, '活动', 'activity', 'fish_ad_type', 
 INSERT INTO sys_dict_type VALUES (103, '优惠券类型', 'fish_coupon_type', '0', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_dict_data VALUES (530, 1, '满减券', 'amount',   'fish_coupon_type', '', 'warning', 'N', '0', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_dict_data VALUES (531, 2, '时长券', 'duration', 'fish_coupon_type', '', 'success', 'N', '0', 'admin', sysdate(), '', null, '');
+
+-- ----------------------------
+-- 初始化默认计费规则与钓场
+-- ----------------------------
+INSERT INTO `fish_billing_rule` (`rule_id`, `rule_name`, `step_minutes`, `price_per_step_cents`, `min_duration_minutes`, `round_type`, `summary`, `status`, `del_flag`, `create_by`, `create_time`)
+VALUES (1, '标准计费', 30, 300, 30, 'ceil_step', '起步 30 分钟起计', '0', '0', 'admin', sysdate());
+
+INSERT INTO `fish_venue` (`venue_id`, `name`, `address`, `notice`, `phone`, `rule_id`, `status`, `del_flag`, `create_by`, `create_time`)
+VALUES (1, '共享钓场', '', '', '', 1, '0', '0', 'admin', sysdate());

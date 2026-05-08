@@ -58,8 +58,8 @@ create table sys_user (
   primary key (user_id)
 ) engine=innodb auto_increment=100 comment = '用户信息表';
 
--- 默认密码: admin123
-insert into sys_user values(1, 101, 'admin', '管理员', '00', 'admin@qq.com', '15888888888', '1', '', '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2', '0', '0', '127.0.0.1', sysdate(), sysdate(), 'admin', sysdate(), '', null, '超级管理员');
+-- 临时初始密码: ChangeMe#2026，首次登录后立即修改
+insert into sys_user values(1, 101, 'admin', '管理员', '00', 'admin@qq.com', '15888888888', '1', '', '$2a$10$aMN3sHertnAYeI93ULvBlOPpbGuTT3DIHzCaTuU8dttO4OnwZIHDS', '0', '0', '127.0.0.1', sysdate(), null, 'admin', sysdate(), '', null, '超级管理员');
 
 
 -- ----------------------------
@@ -299,10 +299,12 @@ create table sys_config (
 
 -- 仅保留框架启动必须的配置
 insert into sys_config values(1, '主框架页-默认皮肤样式名称', 'sys.index.skinName',            'skin-blue',  'Y', 'admin', sysdate(), '', null, '');
-insert into sys_config values(2, '用户管理-账号初始密码',      'sys.user.initPassword',         '123456',     'Y', 'admin', sysdate(), '', null, '');
+insert into sys_config values(2, '用户管理-账号初始密码',      'sys.user.initPassword',         'ChangeMe#2026', 'Y', 'admin', sysdate(), '', null, '');
 insert into sys_config values(3, '主框架页-侧边栏主题',        'sys.index.sideTheme',           'theme-dark', 'Y', 'admin', sysdate(), '', null, '');
 insert into sys_config values(4, '账号自助-验证码开关',        'sys.account.captchaEnabled',    'true',       'Y', 'admin', sysdate(), '', null, '');
 insert into sys_config values(5, '账号自助-是否开启用户注册功能', 'sys.account.registerUser',    'false',      'Y', 'admin', sysdate(), '', null, '');
+insert into sys_config values(6, '账号安全-初始密码提示修改',  'sys.account.initPasswordModify','1',          'Y', 'admin', sysdate(), '', null, '');
+insert into sys_config values(7, '账号安全-密码有效天数',      'sys.account.passwordValidateDays','90',       'Y', 'admin', sysdate(), '', null, '');
 
 
 -- ----------------------------

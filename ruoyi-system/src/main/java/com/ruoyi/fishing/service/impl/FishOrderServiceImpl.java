@@ -2,6 +2,7 @@ package com.ruoyi.fishing.service.impl;
 
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,7 +67,7 @@ public class FishOrderServiceImpl implements IFishOrderService
 
         Date now = new Date();
         FishOrder o = new FishOrder();
-        o.setOrderNo("FD" + now.getTime());
+        o.setOrderNo("FD" + now.getTime() + String.format("%04d", ThreadLocalRandom.current().nextInt(10000)));
         o.setUserId(userId);
         o.setVenueId(venueId);
         o.setStatus(1);
@@ -141,6 +142,16 @@ public class FishOrderServiceImpl implements IFishOrderService
                     finalAmount -= discount;
                 }
             }
+            else if ("duration".equals(coupon.getCouponType()))
+            {
+                int freeMinutes = coupon.getCouponValue() == null ? 0 : coupon.getCouponValue();
+                FishBillingRule rule = loadRuleForOrder(order);
+                int stepMinutes = rule.getStepMinutes() == null ? 30 : rule.getStepMinutes();
+                int pricePerStep = rule.getPricePerStepCents() == null ? 0 : rule.getPricePerStepCents();
+                int freeSteps = freeMinutes / stepMinutes;
+                discount = Math.min(freeSteps * pricePerStep, finalAmount);
+                finalAmount -= discount;
+            }
             int used = couponMapper.useCoupon(couponId, orderId);
             if (used == 0) throw new ServiceException("优惠券已被使用");
             order.setCouponId(couponId);
@@ -164,6 +175,55 @@ public class FishOrderServiceImpl implements IFishOrderService
 
     @Override
     @Transactional
+    public FishOrder preparePayment(Long userId, Long orderId, Long couponId)
+    {
+        FishOrder order = orderMapper.selectFishOrderByOrderId(orderId);
+        if (order == null) throw new ServiceException("订单不存在");
+        if (!order.getUserId().equals(userId)) throw new ServiceException("订单不属于当前用户");
+        if (order.getStatus() == 3) return order;
+        if (order.getStatus() != 2 && order.getStatus() != 0) throw new ServiceException("订单状态不允许支付");
+
+        int finalAmount = order.getAmountCents() == null ? 0 : order.getAmountCents();
+        int discount = 0;
+        if (couponId != null)
+        {
+            FishUserCoupon coupon = couponMapper.selectFishUserCouponByCouponId(couponId);
+            if (coupon == null || !coupon.getUserId().equals(userId)) throw new ServiceException("优惠券不存在");
+            if (coupon.getUsed() != null && coupon.getUsed() == 1) throw new ServiceException("优惠券已使用");
+            if (coupon.getExpireTime() != null && coupon.getExpireTime().before(new Date())) throw new ServiceException("优惠券已过期");
+
+            if ("amount".equals(coupon.getCouponType()))
+            {
+                int min = coupon.getMinAmountCents() == null ? 0 : coupon.getMinAmountCents();
+                if (finalAmount >= min)
+                {
+                    discount = Math.min(coupon.getCouponValue(), finalAmount);
+                    finalAmount -= discount;
+                }
+            }
+            else if ("duration".equals(coupon.getCouponType()))
+            {
+                FishBillingRule rule = loadRuleForOrder(order);
+                int stepMinutes = rule.getStepMinutes() == null ? 30 : rule.getStepMinutes();
+                int pricePerStep = rule.getPricePerStepCents() == null ? 0 : rule.getPricePerStepCents();
+                int freeMinutes = coupon.getCouponValue() == null ? 0 : coupon.getCouponValue();
+                int freeSteps = freeMinutes / stepMinutes;
+                discount = Math.min(freeSteps * pricePerStep, finalAmount);
+                finalAmount -= discount;
+            }
+            int used = couponMapper.useCoupon(couponId, orderId);
+            if (used == 0) throw new ServiceException("优惠券已被使用");
+            order.setCouponId(couponId);
+        }
+
+        order.setDiscountCents(discount);
+        order.setAmountPaid(finalAmount);
+        orderMapper.updateFishOrder(order);
+        return order;
+    }
+
+    @Override
+    @Transactional
     public FishOrder markPaid(String orderNo, String tradeNo)
     {
         FishOrder order = orderMapper.selectFishOrderByOrderNo(orderNo);
@@ -172,7 +232,9 @@ public class FishOrderServiceImpl implements IFishOrderService
         orderMapper.updateOrderStatusWithGuard(order.getOrderId(), order.getStatus(), 3);
         order.setStatus(3);
         order.setPaidTime(new Date());
-        order.setAmountPaid(order.getAmountCents() == null ? 0 : order.getAmountCents());
+        int amount = order.getAmountCents() == null ? 0 : order.getAmountCents();
+        int discount = order.getDiscountCents() == null ? 0 : order.getDiscountCents();
+        order.setAmountPaid(amount - discount);
         order.setPayTradeNo(tradeNo);
         orderMapper.updateFishOrder(order);
         return order;
