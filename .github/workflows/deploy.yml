@@ -7,7 +7,7 @@ on:
 
 env:
   DEPLOY_DIR: /www/wwwroot/dyjava
-  JAR_NAME: ruoyi-admin.jar
+  JAR_NAME: dy.jar
 
 jobs:
   deploy:
@@ -80,7 +80,7 @@ jobs:
             systemctl restart "${SERVICE_NAME}.service"
             systemctl status "${SERVICE_NAME}.service" --no-pager -l
           else
-            echo "Jar uploaded to ${DEPLOY_DIR}/ruoyi-admin.jar."
+            echo "Jar uploaded to ${DEPLOY_DIR}/dy.jar."
             echo "Systemd service ${SERVICE_NAME}.service was not found. Restart the backend manually or add BACKEND_SERVICE secret."
           fi
           EOF
