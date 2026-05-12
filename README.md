@@ -27,7 +27,7 @@
 2. 导入数据库脚本：
 
 ```bash
-mysql -uroot -p ha < sql/ry_20250522.sql
+mysql -uroot -p ha < sql/fishing-full.sql
 ```
 
 3. 修改数据库与 Redis 配置：

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishUserBalanceMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishUserBalance" id="R">
+        <id     property="userId"             column="user_id"/>
+        <result property="balanceCents"       column="balance_cents"/>
+        <result property="totalRechargeCents" column="total_recharge_cents"/>
+        <result property="totalConsumedCents" column="total_consumed_cents"/>
+        <result property="updateTime"         column="update_time"/>
+    </resultMap>
+
+    <select id="selectByUserId" resultMap="R">
+        select user_id, balance_cents, total_recharge_cents, total_consumed_cents, update_time
+        from fish_user_balance where user_id = #{userId}
+    </select>
+
+    <insert id="insertIfAbsent">
+        insert ignore into fish_user_balance (user_id, balance_cents, total_recharge_cents, total_consumed_cents, update_time)
+        values (#{userId}, 0, 0, 0, sysdate())
+    </insert>
+
+    <update id="applyDelta">
+        update fish_user_balance
+        set balance_cents = balance_cents + #{delta},
+            <choose>
+                <when test="recharge != null and recharge">
+                    total_recharge_cents = total_recharge_cents + #{delta},
+                </when>
+                <otherwise>
+                    <if test="delta != null">
+                        total_consumed_cents = total_consumed_cents + (case when #{delta} &lt; 0 then -#{delta} else 0 end),
+                    </if>
+                </otherwise>
+            </choose>
+            update_time = sysdate()
+        where user_id = #{userId}
+        <if test="delta != null">
+            and balance_cents + #{delta} &gt;= 0
+        </if>
+    </update>
+</mapper>

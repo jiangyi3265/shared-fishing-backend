@@ -15,10 +15,12 @@
         <result property="amountCents"     column="amount_cents"/>
         <result property="discountCents"   column="discount_cents"/>
         <result property="amountPaid"      column="amount_paid"/>
+        <result property="balanceCents"    column="balance_cents"/>
         <result property="couponId"        column="coupon_id"/>
         <result property="paidTime"        column="paid_time"/>
         <result property="payTradeNo"      column="pay_trade_no"/>
         <result property="ruleSnapshot"    column="rule_snapshot"/>
+        <result property="mallOrderIds"    column="mall_order_ids"/>
         <result property="cancelReason"    column="cancel_reason"/>
         <result property="createBy"        column="create_by"/>
         <result property="createTime"      column="create_time"/>
@@ -31,7 +33,8 @@
     <sql id="selectFishOrderVo">
         select o.order_id, o.order_no, o.user_id, o.venue_id, o.status, o.start_time, o.end_time,
                o.duration_seconds, o.elapsed_seconds, o.amount_cents, o.discount_cents, o.amount_paid,
-               o.coupon_id, o.paid_time, o.pay_trade_no, o.rule_snapshot, o.cancel_reason,
+               o.balance_cents,
+               o.coupon_id, o.paid_time, o.pay_trade_no, o.rule_snapshot, o.mall_order_ids, o.cancel_reason,
                o.create_by, o.create_time, o.update_by, o.update_time,
                v.name as venue_name, u.nickname as nickname
         from fish_order o
@@ -71,6 +74,11 @@
         where o.user_id = #{userId} and o.status = 1 limit 1
     </select>
 
+    <select id="selectRunningOrderForUpdate" resultMap="FishOrderResult">
+        select order_id, user_id, status from fish_order
+        where user_id = #{userId} and status = 1 limit 1 for update
+    </select>
+
     <select id="selectPendingOrder" resultMap="FishOrderResult">
         <include refid="selectFishOrderVo"/>
         where o.user_id = #{userId} and o.status in (0, 2) order by o.order_id desc limit 1
@@ -80,6 +88,12 @@
         <include refid="selectFishOrderVo"/>
         where o.user_id = #{userId}
         order by o.order_id desc
+    </select>
+
+    <select id="selectTimeoutRunningOrders" resultMap="FishOrderResult">
+        <include refid="selectFishOrderVo"/>
+        where o.status = 1 and o.start_time &lt; #{threshold}
+        order by o.order_id asc
     </select>
 
     <insert id="insertFishOrder" parameterType="com.ruoyi.fishing.domain.FishOrder" useGeneratedKeys="true" keyProperty="orderId">
@@ -123,10 +137,12 @@
             <if test="amountCents != null">amount_cents = #{amountCents},</if>
             <if test="discountCents != null">discount_cents = #{discountCents},</if>
             <if test="amountPaid != null">amount_paid = #{amountPaid},</if>
+            <if test="balanceCents != null">balance_cents = #{balanceCents},</if>
             <if test="couponId != null">coupon_id = #{couponId},</if>
             <if test="paidTime != null">paid_time = #{paidTime},</if>
             <if test="payTradeNo != null">pay_trade_no = #{payTradeNo},</if>
             <if test="ruleSnapshot != null">rule_snapshot = #{ruleSnapshot},</if>
+            <if test="mallOrderIds != null">mall_order_ids = #{mallOrderIds},</if>
             <if test="cancelReason != null">cancel_reason = #{cancelReason},</if>
             <if test="updateBy != null">update_by = #{updateBy},</if>
             update_time = sysdate()

@@ -46,6 +46,13 @@ public class ProductionConfigValidator implements BeanFactoryPostProcessor, Envi
         String tokenSecret = environment.getProperty("token.secret", "");
         String wxSecret = environment.getProperty("wx.miniapp.secret", "");
         boolean wxMockEnabled = environment.getProperty("wx.miniapp.mock-enabled", Boolean.class, false);
+        boolean wxPayEnabled = environment.getProperty("wx.pay.enabled", Boolean.class, false);
+        boolean wxPayMockEnabled = environment.getProperty("wx.pay.mock-enabled", Boolean.class, true);
+        String wxPayMchId = environment.getProperty("wx.pay.mch-id", "");
+        String wxPayApiV3 = environment.getProperty("wx.pay.api-v3-key", "");
+        String wxPayNotify = environment.getProperty("wx.pay.notify-url", "");
+        String wxPayPrivateKey = environment.getProperty("wx.pay.private-key-path", "");
+        String wxPayCertSerial = environment.getProperty("wx.pay.cert-serial", "");
         String corsOrigins = environment.getProperty("cors.allowed-origin-patterns", "");
         boolean swaggerEnabled = environment.getProperty("swagger.enabled", Boolean.class, false);
         boolean demoEnabled = environment.getProperty("demo.enabled", Boolean.class, false);
@@ -66,6 +73,34 @@ public class ProductionConfigValidator implements BeanFactoryPostProcessor, Envi
         if (wxMockEnabled)
         {
             errors.add("WX_MOCK_ENABLED 生产环境必须为 false");
+        }
+        if (!wxPayEnabled)
+        {
+            errors.add("WX_PAY_ENABLED 生产环境必须为 true");
+        }
+        if (wxPayMockEnabled)
+        {
+            errors.add("WX_PAY_MOCK_ENABLED 生产环境必须为 false");
+        }
+        if (isPlaceholder(wxPayMchId))
+        {
+            errors.add("WX_PAY_MCH_ID 未配置");
+        }
+        if (isPlaceholder(wxPayApiV3))
+        {
+            errors.add("WX_PAY_APIV3 未配置");
+        }
+        if (isBlank(wxPayNotify) || !wxPayNotify.startsWith("https://"))
+        {
+            errors.add("WX_PAY_NOTIFY 必须配置为 HTTPS 回调地址");
+        }
+        if (isPlaceholder(wxPayPrivateKey))
+        {
+            errors.add("WX_PAY_PRIVATE_KEY 未配置");
+        }
+        if (isPlaceholder(wxPayCertSerial))
+        {
+            errors.add("WX_PAY_CERT_SERIAL 未配置");
         }
         if (isBlank(corsOrigins) || containsLocalhost(corsOrigins))
         {
@@ -88,6 +123,11 @@ public class ProductionConfigValidator implements BeanFactoryPostProcessor, Envi
     private boolean isBlank(String value)
     {
         return value == null || value.trim().isEmpty();
+    }
+
+    private boolean isPlaceholder(String value)
+    {
+        return isBlank(value) || value.startsWith("replace-with");
     }
 
     private boolean containsLocalhost(String value)

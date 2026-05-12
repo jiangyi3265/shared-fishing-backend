@@ -31,6 +31,19 @@ public class FishUser extends BaseEntity
     @Excel(name = "状态", readConverterExp = "0=正常,1=禁用")
     private String status;
 
+    @Excel(name = "店员", readConverterExp = "0=普通,1=店员")
+    private Integer isStaff;
+
+    @Excel(name = "黑名单", readConverterExp = "0=正常,1=黑名单")
+    private Integer isBlacklist;
+
+    private String blacklistReason;
+
+    private Long memberLevelId;
+    private String memberLevelName;
+
+    private Integer points;
+
     private Date lastLoginTime;
 
     public Long getUserId() { return userId; }
@@ -47,6 +60,18 @@ public class FishUser extends BaseEntity
     public void setPhone(String phone) { this.phone = phone; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public Integer getIsStaff() { return isStaff; }
+    public void setIsStaff(Integer isStaff) { this.isStaff = isStaff; }
+    public Integer getIsBlacklist() { return isBlacklist; }
+    public void setIsBlacklist(Integer isBlacklist) { this.isBlacklist = isBlacklist; }
+    public String getBlacklistReason() { return blacklistReason; }
+    public void setBlacklistReason(String blacklistReason) { this.blacklistReason = blacklistReason; }
+    public Long getMemberLevelId() { return memberLevelId; }
+    public void setMemberLevelId(Long memberLevelId) { this.memberLevelId = memberLevelId; }
+    public String getMemberLevelName() { return memberLevelName; }
+    public void setMemberLevelName(String memberLevelName) { this.memberLevelName = memberLevelName; }
+    public Integer getPoints() { return points; }
+    public void setPoints(Integer points) { this.points = points; }
     public Date getLastLoginTime() { return lastLoginTime; }
     public void setLastLoginTime(Date lastLoginTime) { this.lastLoginTime = lastLoginTime; }
 

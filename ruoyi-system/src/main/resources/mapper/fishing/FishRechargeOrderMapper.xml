@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishRechargeOrderMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishRechargeOrder" id="R">
+        <id     property="rechargeId"       column="recharge_id"/>
+        <result property="rechargeNo"       column="recharge_no"/>
+        <result property="userId"           column="user_id"/>
+        <result property="planId"           column="plan_id"/>
+        <result property="amountCents"      column="amount_cents"/>
+        <result property="bonusCents"       column="bonus_cents"/>
+        <result property="totalCreditCents" column="total_credit_cents"/>
+        <result property="status"           column="status"/>
+        <result property="payTradeNo"       column="pay_trade_no"/>
+        <result property="paidTime"         column="paid_time"/>
+        <result property="createTime"       column="create_time"/>
+        <result property="updateTime"       column="update_time"/>
+        <result property="nickname"         column="nickname"/>
+    </resultMap>
+
+    <sql id="vo">
+        select o.recharge_id, o.recharge_no, o.user_id, o.plan_id,
+               o.amount_cents, o.bonus_cents, o.total_credit_cents, o.status,
+               o.pay_trade_no, o.paid_time, o.create_time, o.update_time,
+               u.nickname
+        from fish_recharge_order o
+        left join fish_user u on o.user_id = u.user_id
+    </sql>
+
+    <select id="selectById" resultMap="R">
+        <include refid="vo"/> where o.recharge_id = #{rechargeId}
+    </select>
+
+    <select id="selectByRechargeNo" resultMap="R">
+        <include refid="vo"/> where o.recharge_no = #{rechargeNo}
+    </select>
+
+    <select id="selectList" parameterType="com.ruoyi.fishing.domain.FishRechargeOrder" resultMap="R">
+        <include refid="vo"/>
+        <where>
+            <if test="rechargeNo != null and rechargeNo != ''">AND o.recharge_no like concat('%', #{rechargeNo}, '%')</if>
+            <if test="userId != null">AND o.user_id = #{userId}</if>
+            <if test="status != null">AND o.status = #{status}</if>
+            <if test="params.beginTime != null and params.beginTime != ''">AND o.create_time &gt;= #{params.beginTime}</if>
+            <if test="params.endTime != null and params.endTime != ''">AND o.create_time &lt;= #{params.endTime}</if>
+        </where>
+        order by o.recharge_id desc
+    </select>
+
+    <select id="selectByUser" resultMap="R">
+        <include refid="vo"/>
+        where o.user_id = #{userId}
+        order by o.recharge_id desc
+        limit 50
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishRechargeOrder" useGeneratedKeys="true" keyProperty="rechargeId">
+        insert into fish_recharge_order (recharge_no, user_id, plan_id, amount_cents, bonus_cents, total_credit_cents, status, create_time)
+        values (#{rechargeNo}, #{userId}, #{planId}, #{amountCents}, #{bonusCents}, #{totalCreditCents}, #{status}, sysdate())
+    </insert>
+
+    <update id="update" parameterType="com.ruoyi.fishing.domain.FishRechargeOrder">
+        update fish_recharge_order
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="status     != null">status = #{status},</if>
+            <if test="payTradeNo != null">pay_trade_no = #{payTradeNo},</if>
+            <if test="paidTime   != null">paid_time = #{paidTime},</if>
+            update_time = sysdate()
+        </trim>
+        where recharge_id = #{rechargeId}
+    </update>
+
+    <update id="updateStatusWithGuard">
+        update fish_recharge_order set status = #{newStatus}, update_time = sysdate()
+        where recharge_id = #{rechargeId} and status = #{expectedStatus}
+    </update>
+</mapper>

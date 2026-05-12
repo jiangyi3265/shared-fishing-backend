@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishMallOrderMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishMallOrder" id="R">
+        <id     property="mallOrderId"  column="mall_order_id"/>
+        <result property="mallOrderNo"  column="mall_order_no"/>
+        <result property="userId"       column="user_id"/>
+        <result property="venueId"      column="venue_id"/>
+        <result property="totalCents"   column="total_cents"/>
+        <result property="amountPaid"   column="amount_paid"/>
+        <result property="balanceCents" column="balance_cents"/>
+        <result property="status"       column="status"/>
+        <result property="remark2"      column="remark"/>
+        <result property="redeemCode"   column="redeem_code"/>
+        <result property="payTradeNo"   column="pay_trade_no"/>
+        <result property="paidTime"     column="paid_time"/>
+        <result property="redeemedTime" column="redeemed_time"/>
+        <result property="redeemedBy"   column="redeemed_by"/>
+        <result property="createBy"     column="create_by"/>
+        <result property="createTime"   column="create_time"/>
+        <result property="updateBy"     column="update_by"/>
+        <result property="updateTime"   column="update_time"/>
+        <result property="nickname"     column="nickname"/>
+    </resultMap>
+
+    <resultMap type="com.ruoyi.fishing.domain.FishMallOrderItem" id="I">
+        <id     property="itemId"      column="item_id"/>
+        <result property="mallOrderId" column="mall_order_id"/>
+        <result property="goodsId"     column="goods_id"/>
+        <result property="name"        column="name"/>
+        <result property="subtitle"    column="subtitle"/>
+        <result property="cover"       column="cover"/>
+        <result property="priceCents"  column="price_cents"/>
+        <result property="qty"         column="qty"/>
+    </resultMap>
+
+    <sql id="vo">
+        select o.mall_order_id, o.mall_order_no, o.user_id, o.venue_id, o.total_cents, o.amount_paid,
+               o.balance_cents,
+               o.status, o.remark, o.redeem_code, o.pay_trade_no, o.paid_time, o.redeemed_time, o.redeemed_by,
+               o.create_by, o.create_time, o.update_by, o.update_time,
+               u.nickname as nickname
+        from fish_mall_order o
+        left join fish_user u on o.user_id = u.user_id
+    </sql>
+
+    <select id="selectById" resultMap="R">
+        <include refid="vo"/> where o.mall_order_id = #{mallOrderId}
+    </select>
+
+    <select id="selectByOrderNo" resultMap="R">
+        <include refid="vo"/> where o.mall_order_no = #{orderNo}
+    </select>
+
+    <select id="selectByRedeemCode" resultMap="R">
+        <include refid="vo"/> where o.redeem_code = #{code} order by o.mall_order_id desc limit 1
+    </select>
+
+    <select id="selectList" parameterType="com.ruoyi.fishing.domain.FishMallOrder" resultMap="R">
+        <include refid="vo"/>
+        <where>
+            <if test="mallOrderNo != null and mallOrderNo != ''">AND o.mall_order_no like concat('%', #{mallOrderNo}, '%')</if>
+            <if test="userId != null">AND o.user_id = #{userId}</if>
+            <if test="status != null">AND o.status  = #{status}</if>
+            <if test="redeemCode != null and redeemCode != ''">AND o.redeem_code = #{redeemCode}</if>
+            <if test="params.beginTime != null and params.beginTime != ''">AND o.create_time &gt;= #{params.beginTime}</if>
+            <if test="params.endTime != null and params.endTime != ''">AND o.create_time &lt;= #{params.endTime}</if>
+        </where>
+        order by o.mall_order_id desc
+    </select>
+
+    <select id="selectByUser" resultMap="R">
+        <include refid="vo"/>
+        where o.user_id = #{userId}
+        order by o.mall_order_id desc
+    </select>
+
+    <!-- 扫描超时待支付订单：排除已被钓场合并支付的（fish_order.mall_order_ids 里引用到的 ID） -->
+    <select id="selectTimeoutUnpaidOrders" resultMap="R">
+        <include refid="vo"/>
+        where o.status = 0 and o.create_time &lt;= #{threshold}
+        and not exists (
+            select 1 from fish_order fo
+            where fo.status in (0, 2)
+              and fo.mall_order_ids is not null
+              and fo.mall_order_ids != ''
+              and find_in_set(o.mall_order_id, replace(fo.mall_order_ids, ' ', '')) > 0
+        )
+        order by o.mall_order_id asc
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishMallOrder" useGeneratedKeys="true" keyProperty="mallOrderId">
+        insert into fish_mall_order (mall_order_no, user_id, venue_id, total_cents, status, remark, redeem_code, create_time)
+        values (#{mallOrderNo}, #{userId}, #{venueId}, #{totalCents}, #{status}, #{remark2}, #{redeemCode}, sysdate())
+    </insert>
+
+    <update id="update" parameterType="com.ruoyi.fishing.domain.FishMallOrder">
+        update fish_mall_order
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="status       != null">status = #{status},</if>
+            <if test="amountPaid   != null">amount_paid = #{amountPaid},</if>
+            <if test="balanceCents != null">balance_cents = #{balanceCents},</if>
+            <if test="payTradeNo   != null">pay_trade_no = #{payTradeNo},</if>
+            <if test="paidTime     != null">paid_time = #{paidTime},</if>
+            <if test="redeemedTime != null">redeemed_time = #{redeemedTime},</if>
+            <if test="redeemedBy   != null">redeemed_by = #{redeemedBy},</if>
+            <if test="updateBy     != null">update_by = #{updateBy},</if>
+            update_time = sysdate()
+        </trim>
+        where mall_order_id = #{mallOrderId}
+    </update>
+
+    <update id="updateStatusWithGuard">
+        update fish_mall_order set status = #{newStatus}, update_time = sysdate()
+        where mall_order_id = #{mallOrderId} and status = #{expectedStatus}
+    </update>
+
+    <insert id="insertItem" parameterType="com.ruoyi.fishing.domain.FishMallOrderItem" useGeneratedKeys="true" keyProperty="itemId">
+        insert into fish_mall_order_item (mall_order_id, goods_id, name, subtitle, cover, price_cents, qty)
+        values (#{mallOrderId}, #{goodsId}, #{name}, #{subtitle}, #{cover}, #{priceCents}, #{qty})
+    </insert>
+
+    <select id="selectItemsByOrderId" resultMap="I">
+        select item_id, mall_order_id, goods_id, name, subtitle, cover, price_cents, qty
+        from fish_mall_order_item where mall_order_id = #{mallOrderId} order by item_id asc
+    </select>
+</mapper>

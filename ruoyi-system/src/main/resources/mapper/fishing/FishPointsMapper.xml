@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishPointsMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishPointsGoods" id="GoodsResult">
+        <id property="goodsId" column="goods_id"/>
+        <result property="name" column="name"/>
+        <result property="image" column="image"/>
+        <result property="type" column="type"/>
+        <result property="pointsCost" column="points_cost"/>
+        <result property="stock" column="stock"/>
+        <result property="relatedId" column="related_id"/>
+        <result property="durationMinutes" column="duration_minutes"/>
+        <result property="sortNum" column="sort_num"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <resultMap type="com.ruoyi.fishing.domain.FishPointsExchange" id="ExchangeResult">
+        <id property="exchangeId" column="exchange_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="nickname" column="nickname"/>
+        <result property="goodsId" column="goods_id"/>
+        <result property="goodsName" column="goods_name"/>
+        <result property="pointsCost" column="points_cost"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <!-- 积分商品 -->
+    <select id="selectGoodsList" parameterType="com.ruoyi.fishing.domain.FishPointsGoods" resultMap="GoodsResult">
+        select * from fish_points_goods
+        <where>
+            <if test="name != null and name != ''">AND name like concat('%', #{name}, '%')</if>
+            <if test="type != null and type != ''">AND type = #{type}</if>
+            <if test="status != null and status != ''">AND status = #{status}</if>
+        </where>
+        order by sort_num asc, goods_id asc
+    </select>
+    <select id="selectGoodsActive" resultMap="GoodsResult">
+        select * from fish_points_goods where status = '0' and stock > 0 order by sort_num asc
+    </select>
+    <select id="selectGoodsById" parameterType="Long" resultMap="GoodsResult">
+        select * from fish_points_goods where goods_id = #{goodsId}
+    </select>
+    <insert id="insertGoods" parameterType="com.ruoyi.fishing.domain.FishPointsGoods" useGeneratedKeys="true" keyProperty="goodsId">
+        insert into fish_points_goods (name, image, type, points_cost, stock, related_id, duration_minutes, sort_num, status, create_time)
+        values (#{name}, #{image}, #{type}, #{pointsCost}, #{stock}, #{relatedId}, #{durationMinutes}, #{sortNum}, #{status}, sysdate())
+    </insert>
+    <update id="updateGoods" parameterType="com.ruoyi.fishing.domain.FishPointsGoods">
+        update fish_points_goods
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="name != null">name = #{name},</if>
+            <if test="image != null">image = #{image},</if>
+            <if test="type != null">type = #{type},</if>
+            <if test="pointsCost != null">points_cost = #{pointsCost},</if>
+            <if test="stock != null">stock = #{stock},</if>
+            <if test="relatedId != null">related_id = #{relatedId},</if>
+            <if test="durationMinutes != null">duration_minutes = #{durationMinutes},</if>
+            <if test="sortNum != null">sort_num = #{sortNum},</if>
+            <if test="status != null">status = #{status},</if>
+            update_time = sysdate()
+        </trim>
+        where goods_id = #{goodsId}
+    </update>
+    <delete id="deleteGoodsByIds" parameterType="Long">
+        delete from fish_points_goods where goods_id in
+        <foreach collection="array" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </delete>
+    <update id="decreaseGoodsStock">
+        update fish_points_goods set stock = stock - #{qty} where goods_id = #{goodsId} and stock >= #{qty}
+    </update>
+
+    <!-- 兑换记录 -->
+    <select id="selectExchangeList" parameterType="com.ruoyi.fishing.domain.FishPointsExchange" resultMap="ExchangeResult">
+        select e.*, u.nickname from fish_points_exchange e left join fish_user u on u.user_id = e.user_id
+        <where>
+            <if test="userId != null">AND e.user_id = #{userId}</if>
+            <if test="status != null">AND e.status = #{status}</if>
+        </where>
+        order by e.create_time desc
+    </select>
+    <select id="selectExchangeByUser" parameterType="Long" resultMap="ExchangeResult">
+        select e.*, u.nickname from fish_points_exchange e left join fish_user u on u.user_id = e.user_id
+        where e.user_id = #{userId} order by e.create_time desc limit 50
+    </select>
+    <select id="selectExchangeById" parameterType="Long" resultMap="ExchangeResult">
+        select e.*, u.nickname from fish_points_exchange e left join fish_user u on u.user_id = e.user_id where e.exchange_id = #{exchangeId}
+    </select>
+    <insert id="insertExchange" parameterType="com.ruoyi.fishing.domain.FishPointsExchange" useGeneratedKeys="true" keyProperty="exchangeId">
+        insert into fish_points_exchange (user_id, goods_id, goods_name, points_cost, status, create_time)
+        values (#{userId}, #{goodsId}, #{goodsName}, #{pointsCost}, #{status}, sysdate())
+    </insert>
+    <update id="updateExchangeStatus">
+        update fish_points_exchange set status = #{status}, update_time = sysdate() where exchange_id = #{exchangeId}
+    </update>
+
+    <!-- 用户积分 -->
+    <update id="addPoints">
+        update fish_user set points = points + #{delta}
+        where user_id = #{userId}
+        <if test="delta &lt; 0">and points + #{delta} &gt;= 0</if>
+    </update>
+    <select id="selectUserPoints" parameterType="Long" resultType="Integer">
+        select points from fish_user where user_id = #{userId}
+    </select>
+
+    <!-- 积分流水 -->
+    <insert id="insertPointsLog">
+        insert into fish_points_log (user_id, delta, points_after, type, related_id, remark, create_time)
+        values (#{userId}, #{delta}, #{pointsAfter}, #{type}, #{relatedId}, #{remark}, sysdate())
+    </insert>
+
+    <!-- 签到 -->
+    <insert id="insertCheckin">
+        insert ignore into fish_checkin (user_id, checkin_date, points_earned, create_time)
+        values (#{userId}, #{checkinDate}, #{points}, sysdate())
+    </insert>
+    <select id="countCheckin" resultType="int">
+        select count(*) from fish_checkin where user_id = #{userId} and checkin_date = #{checkinDate}
+    </select>
+    <select id="countConsecutiveCheckin" resultType="int">
+        select count(*) from fish_checkin where user_id = #{userId} and checkin_date &gt;= #{startDate} and checkin_date &lt;= curdate()
+    </select>
+    <select id="selectRecentCheckinDays" resultType="String">
+        select date_format(checkin_date, '%Y-%m-%d') from fish_checkin
+        where user_id = #{userId} and checkin_date &gt;= date_sub(curdate(), interval 60 day)
+        order by checkin_date desc
+    </select>
+    <select id="selectCheckinDays" resultType="String">
+        select date_format(checkin_date, '%Y-%m-%d') from fish_checkin
+        where user_id = #{userId} and date_format(checkin_date, '%Y-%m') = #{month}
+        order by checkin_date asc
+    </select>
+</mapper>

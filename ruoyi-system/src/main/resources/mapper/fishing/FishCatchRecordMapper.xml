@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishCatchRecordMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishCatchRecord" id="CatchResult">
+        <id     property="catchId"       column="catch_id"/>
+        <result property="userId"        column="user_id"/>
+        <result property="nickname"      column="nickname"/>
+        <result property="avatar"        column="avatar"/>
+        <result property="venueId"       column="venue_id"/>
+        <result property="orderId"       column="order_id"/>
+        <result property="fishSpecies"   column="fish_species"/>
+        <result property="weightJin"     column="weight_jin"/>
+        <result property="fishCount"     column="fish_count"/>
+        <result property="images"        column="images"/>
+        <result property="content"       column="content"/>
+        <result property="fishingMethod" column="fishing_method"/>
+        <result property="isFeatured"    column="is_featured"/>
+        <result property="likeCount"     column="like_count"/>
+        <result property="commentCount"  column="comment_count"/>
+        <result property="status"        column="status"/>
+        <result property="rejectReason"  column="reject_reason"/>
+        <result property="delFlag"       column="del_flag"/>
+        <result property="createBy"      column="create_by"/>
+        <result property="createTime"    column="create_time"/>
+        <result property="updateTime"    column="update_time"/>
+    </resultMap>
+
+    <sql id="selectVo">
+        select c.catch_id, c.user_id, u.nickname, u.avatar, c.venue_id, c.order_id,
+               c.fish_species, c.weight_jin, c.fish_count, c.images, c.content,
+               c.fishing_method, c.is_featured, c.like_count, c.comment_count, c.status, c.reject_reason,
+               c.del_flag, c.create_by, c.create_time, c.update_time
+        from fish_catch_record c
+        left join fish_user u on u.user_id = c.user_id
+    </sql>
+
+    <select id="selectList" parameterType="com.ruoyi.fishing.domain.FishCatchRecord" resultMap="CatchResult">
+        <include refid="selectVo"/>
+        <where>
+            c.del_flag = '0'
+            <if test="userId != null">AND c.user_id = #{userId}</if>
+            <if test="venueId != null">AND c.venue_id = #{venueId}</if>
+            <if test="status != null">AND c.status = #{status}</if>
+            <if test="isFeatured != null">AND c.is_featured = #{isFeatured}</if>
+            <if test="fishSpecies != null and fishSpecies != ''">AND c.fish_species like concat('%', #{fishSpecies}, '%')</if>
+        </where>
+        order by c.create_time desc
+    </select>
+
+    <select id="selectPublicList" resultMap="CatchResult">
+        <include refid="selectVo"/>
+        where c.del_flag = '0' and c.status = 1
+        order by c.is_featured desc, c.create_time desc
+        limit 100
+    </select>
+
+    <select id="selectByUser" parameterType="Long" resultMap="CatchResult">
+        <include refid="selectVo"/> where c.del_flag = '0' and c.user_id = #{userId}
+        order by c.create_time desc limit 50
+    </select>
+
+    <select id="selectById" parameterType="Long" resultMap="CatchResult">
+        <include refid="selectVo"/> where c.catch_id = #{catchId} and c.del_flag = '0'
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishCatchRecord" useGeneratedKeys="true" keyProperty="catchId">
+        insert into fish_catch_record (user_id, venue_id, order_id, fish_species, weight_jin, fish_count,
+            images, content, fishing_method, is_featured, like_count, status, create_time)
+        values (#{userId}, #{venueId}, #{orderId}, #{fishSpecies}, #{weightJin}, #{fishCount},
+            #{images}, #{content}, #{fishingMethod}, 0, 0, 0, sysdate())
+    </insert>
+
+    <update id="update" parameterType="com.ruoyi.fishing.domain.FishCatchRecord">
+        update fish_catch_record
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="status != null">status = #{status},</if>
+            <if test="isFeatured != null">is_featured = #{isFeatured},</if>
+            <if test="rejectReason != null">reject_reason = #{rejectReason},</if>
+            update_time = sysdate()
+        </trim>
+        where catch_id = #{catchId}
+    </update>
+
+    <update id="deleteByIds" parameterType="Long">
+        update fish_catch_record set del_flag = '2' where catch_id in
+        <foreach collection="array" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </update>
+
+    <update id="incrementLike">update fish_catch_record set like_count = like_count + 1 where catch_id = #{catchId}</update>
+    <update id="decrementLike">update fish_catch_record set like_count = greatest(like_count - 1, 0) where catch_id = #{catchId}</update>
+
+    <insert id="insertLike">insert ignore into fish_catch_like (user_id, catch_id) values (#{userId}, #{catchId})</insert>
+    <delete id="deleteLike">delete from fish_catch_like where user_id = #{userId} and catch_id = #{catchId}</delete>
+    <select id="countLike" resultType="int">select count(*) from fish_catch_like where user_id = #{userId} and catch_id = #{catchId}</select>
+</mapper>

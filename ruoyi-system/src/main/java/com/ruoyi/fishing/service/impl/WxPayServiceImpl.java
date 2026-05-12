@@ -27,7 +27,9 @@ public class WxPayServiceImpl implements IWxPayService
     private WxProperties wxProperties;
 
     private Object jsapiService;
+    private Object refundService;
     private Object notificationParser;
+    private Object refundConfig;
     private boolean initialized = false;
 
     @Override
@@ -58,6 +60,12 @@ public class WxPayServiceImpl implements IWxPayService
             Class<?> parser = Class.forName("com.wechat.pay.java.core.notification.NotificationParser");
             notificationParser = parser.getConstructor(Class.forName("com.wechat.pay.java.core.notification.NotificationConfig"))
                     .newInstance(config);
+            refundConfig = config;
+
+            Class<?> refundBuilder = Class.forName("com.wechat.pay.java.service.refund.RefundService$Builder");
+            Object rb = refundBuilder.getDeclaredConstructor().newInstance();
+            refundBuilder.getMethod("config", Class.forName("com.wechat.pay.java.core.Config")).invoke(rb, config);
+            refundService = refundBuilder.getMethod("build").invoke(rb);
 
             initialized = true;
             log.info("WxPay SDK 初始化成功");
@@ -146,6 +154,76 @@ public class WxPayServiceImpl implements IWxPayService
             return (String) txCls.getMethod("getOutTradeNo").invoke(tx);
         } catch (Throwable t) {
             log.error("解析微信支付回调失败", t);
+            return null;
+        }
+    }
+
+    @Override
+    public String refund(String orderNo, String refundNo, int amountCents, int totalCents, String reason)
+    {
+        ensureInit();
+        if (!initialized)
+        {
+            if (isEnabled() || !isMockEnabled()) throw new ServiceException("微信退款未初始化");
+            return "MOCK_REFUND_" + System.currentTimeMillis();
+        }
+        try {
+            WxProperties.Pay pay = wxProperties.getPay();
+            Class<?> reqCls = Class.forName("com.wechat.pay.java.service.refund.model.CreateRequest");
+            Class<?> amtCls = Class.forName("com.wechat.pay.java.service.refund.model.AmountReq");
+            Object req = reqCls.getDeclaredConstructor().newInstance();
+            reqCls.getMethod("setOutTradeNo", String.class).invoke(req, orderNo);
+            reqCls.getMethod("setOutRefundNo", String.class).invoke(req, refundNo);
+            if (reason != null && !reason.isEmpty())
+            {
+                try { reqCls.getMethod("setReason", String.class).invoke(req, reason); } catch (NoSuchMethodException ignore) {}
+            }
+            reqCls.getMethod("setNotifyUrl", String.class).invoke(req, pay.getNotifyUrl().replaceAll("/notify$", "/refund/notify"));
+
+            Object amount = amtCls.getDeclaredConstructor().newInstance();
+            amtCls.getMethod("setRefund", Long.class).invoke(amount, (long) amountCents);
+            amtCls.getMethod("setTotal",  Long.class).invoke(amount, (long) totalCents);
+            amtCls.getMethod("setCurrency", String.class).invoke(amount, "CNY");
+            reqCls.getMethod("setAmount", amtCls).invoke(req, amount);
+
+            Object refund = refundService.getClass().getMethod("create", reqCls).invoke(refundService, req);
+            Object id = refund.getClass().getMethod("getRefundId").invoke(refund);
+            return id == null ? "" : id.toString();
+        } catch (ServiceException e) {
+            throw e;
+        } catch (Throwable t) {
+            log.error("微信退款下单失败", t);
+            throw new ServiceException("微信退款下单失败: " + t.getMessage());
+        }
+    }
+
+    @Override
+    public RefundCallback handleRefundNotify(String body, Map<String, String> headers)
+    {
+        ensureInit();
+        if (!initialized) return null;
+        try {
+            Class<?> reqCls = Class.forName("com.wechat.pay.java.core.notification.RequestParam$Builder");
+            Object b = reqCls.getDeclaredConstructor().newInstance();
+            reqCls.getMethod("serialNumber", String.class).invoke(b, header(headers, "Wechatpay-Serial"));
+            reqCls.getMethod("nonce",        String.class).invoke(b, header(headers, "Wechatpay-Nonce"));
+            reqCls.getMethod("signature",    String.class).invoke(b, header(headers, "Wechatpay-Signature"));
+            reqCls.getMethod("timestamp",    String.class).invoke(b, header(headers, "Wechatpay-Timestamp"));
+            reqCls.getMethod("body",         String.class).invoke(b, body);
+            Object param = reqCls.getMethod("build").invoke(b);
+
+            Class<?> refundNotifyCls = Class.forName("com.wechat.pay.java.service.refund.model.RefundNotification");
+            Object n = notificationParser.getClass()
+                    .getMethod("parse", Class.forName("com.wechat.pay.java.core.notification.RequestParam"), Class.class)
+                    .invoke(notificationParser, param, refundNotifyCls);
+            RefundCallback cb = new RefundCallback();
+            cb.refundNo  = (String) refundNotifyCls.getMethod("getOutRefundNo").invoke(n);
+            cb.wxRefundNo = (String) refundNotifyCls.getMethod("getRefundId").invoke(n);
+            Object status = refundNotifyCls.getMethod("getRefundStatus").invoke(n);
+            cb.success = status != null && "SUCCESS".equals(status.toString());
+            return cb;
+        } catch (Throwable t) {
+            log.error("解析微信退款回调失败", t);
             return null;
         }
     }

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishCompetitionMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishCompetition" id="CompResult">
+        <id property="compId" column="comp_id"/><result property="adId" column="ad_id"/>
+        <result property="venueId" column="venue_id"/><result property="title" column="title"/>
+        <result property="compDate" column="comp_date"/><result property="timeSlot" column="time_slot"/>
+        <result property="maxPlayers" column="max_players"/><result property="entryFeeCents" column="entry_fee_cents"/>
+        <result property="prizePoolCents" column="prize_pool_cents"/><result property="prizeRules" column="prize_rules"/>
+        <result property="fishSpecies" column="fish_species"/><result property="rules" column="rules"/>
+        <result property="status" column="status"/><result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/><result property="updateTime" column="update_time"/>
+        <result property="entryCount" column="entry_count"/>
+    </resultMap>
+
+    <resultMap type="com.ruoyi.fishing.domain.FishCompetitionEntry" id="EntryResult">
+        <id property="entryId" column="entry_id"/><result property="compId" column="comp_id"/>
+        <result property="userId" column="user_id"/><result property="nickname" column="nickname"/>
+        <result property="phone" column="phone"/><result property="weightGram" column="weight_gram"/>
+        <result property="fishCount" column="fish_count"/><result property="ranking" column="ranking"/>
+        <result property="prizeCents" column="prize_cents"/><result property="prizeStatus" column="prize_status"/>
+        <result property="weighTime" column="weigh_time"/><result property="weighBy" column="weigh_by"/>
+        <result property="weighImage" column="weigh_image"/><result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <select id="selectList" parameterType="com.ruoyi.fishing.domain.FishCompetition" resultMap="CompResult">
+        select c.*, (select count(*) from fish_competition_entry e where e.comp_id=c.comp_id) as entry_count from fish_competition c
+        <where><if test="venueId!=null">AND c.venue_id=#{venueId}</if><if test="status!=null">AND c.status=#{status}</if></where>
+        order by c.comp_date desc
+    </select>
+    <select id="selectActiveList" parameterType="Long" resultMap="CompResult">
+        select c.*, (select count(*) from fish_competition_entry e where e.comp_id=c.comp_id) as entry_count from fish_competition c
+        where c.status in (0,1,2)
+        <if test="_parameter!=null">AND c.venue_id=#{venueId}</if>
+        order by c.comp_date asc
+    </select>
+    <select id="selectById" parameterType="Long" resultMap="CompResult">
+        select c.*, (select count(*) from fish_competition_entry e where e.comp_id=c.comp_id) as entry_count from fish_competition c where c.comp_id=#{compId}
+    </select>
+    <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishCompetition" useGeneratedKeys="true" keyProperty="compId">
+        insert into fish_competition(ad_id,venue_id,title,comp_date,time_slot,max_players,entry_fee_cents,prize_pool_cents,prize_rules,fish_species,rules,status,create_by,create_time)
+        values(#{adId},#{venueId},#{title},#{compDate},#{timeSlot},#{maxPlayers},#{entryFeeCents},#{prizePoolCents},#{prizeRules},#{fishSpecies},#{rules},#{status},#{createBy},sysdate())
+    </insert>
+    <update id="update" parameterType="com.ruoyi.fishing.domain.FishCompetition">
+        update fish_competition
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="title!=null">title=#{title},</if><if test="compDate!=null">comp_date=#{compDate},</if>
+            <if test="timeSlot!=null">time_slot=#{timeSlot},</if><if test="maxPlayers!=null">max_players=#{maxPlayers},</if>
+            <if test="entryFeeCents!=null">entry_fee_cents=#{entryFeeCents},</if><if test="prizePoolCents!=null">prize_pool_cents=#{prizePoolCents},</if>
+            <if test="prizeRules!=null">prize_rules=#{prizeRules},</if><if test="fishSpecies!=null">fish_species=#{fishSpecies},</if>
+            <if test="rules!=null">rules=#{rules},</if><if test="status!=null">status=#{status},</if>
+            update_time=sysdate()
+        </trim>
+        where comp_id=#{compId}
+    </update>
+    <update id="updateStatus">update fish_competition set status=#{status},update_time=sysdate() where comp_id=#{compId}</update>
+    <select id="countEntries" parameterType="Long" resultType="int">select count(*) from fish_competition_entry where comp_id=#{compId}</select>
+
+    <select id="selectEntries" parameterType="Long" resultMap="EntryResult">
+        select e.*,u.nickname from fish_competition_entry e left join fish_user u on u.user_id=e.user_id where e.comp_id=#{compId} order by e.create_time asc
+    </select>
+    <select id="selectRanking" parameterType="Long" resultMap="EntryResult">
+        select e.*,u.nickname from fish_competition_entry e left join fish_user u on u.user_id=e.user_id
+        where e.comp_id=#{compId} and e.status=2 order by e.weight_gram desc, e.fish_count desc
+    </select>
+    <select id="selectEntry" resultMap="EntryResult">
+        select * from fish_competition_entry where comp_id=#{compId} and user_id=#{userId} limit 1
+    </select>
+    <insert id="insertEntry" parameterType="com.ruoyi.fishing.domain.FishCompetitionEntry" useGeneratedKeys="true" keyProperty="entryId">
+        insert into fish_competition_entry(comp_id,user_id,nickname,phone,status,create_time) values(#{compId},#{userId},#{nickname},#{phone},0,sysdate())
+    </insert>
+    <update id="updateEntryWeigh">
+        update fish_competition_entry set weight_gram=#{weightGram},fish_count=#{fishCount},weigh_by=#{weighBy},weigh_image=#{weighImage},weigh_time=sysdate(),status=2 where entry_id=#{entryId}
+    </update>
+    <update id="updateEntryRanking">
+        update fish_competition_entry set ranking=#{ranking},prize_cents=#{prizeCents} where entry_id=#{entryId}
+    </update>
+    <update id="updateEntryPrizeStatus">
+        update fish_competition_entry set prize_status=#{prizeStatus} where entry_id=#{entryId}
+    </update>
+</mapper>

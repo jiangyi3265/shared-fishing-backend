@@ -40,6 +40,17 @@ public final class ProductionStartupCheck
         {
             wxMockEnabled = "true";
         }
+        String wxPayEnabled = configValue(argMap, "wx.pay.enabled", "WX_PAY_ENABLED");
+        String wxPayMockEnabled = configValue(argMap, "wx.pay.mock-enabled", "WX_PAY_MOCK_ENABLED");
+        if (isBlank(wxPayMockEnabled))
+        {
+            wxPayMockEnabled = "true";
+        }
+        String wxPayMchId = configValue(argMap, "wx.pay.mch-id", "WX_PAY_MCH_ID");
+        String wxPayApiV3 = configValue(argMap, "wx.pay.api-v3-key", "WX_PAY_APIV3");
+        String wxPayNotify = configValue(argMap, "wx.pay.notify-url", "WX_PAY_NOTIFY");
+        String wxPayPrivateKey = configValue(argMap, "wx.pay.private-key-path", "WX_PAY_PRIVATE_KEY");
+        String wxPayCertSerial = configValue(argMap, "wx.pay.cert-serial", "WX_PAY_CERT_SERIAL");
         String corsOrigins = configValue(argMap, "cors.allowed-origin-patterns", "CORS_ALLOWED_ORIGINS");
 
         if (isBlank(dbPassword) || DEV_DB_PASSWORD.equals(dbPassword))
@@ -57,6 +68,34 @@ public final class ProductionStartupCheck
         if ("true".equalsIgnoreCase(wxMockEnabled))
         {
             errors.add("WX_MOCK_ENABLED 生产环境必须为 false");
+        }
+        if (!"true".equalsIgnoreCase(wxPayEnabled))
+        {
+            errors.add("WX_PAY_ENABLED 生产环境必须为 true");
+        }
+        if ("true".equalsIgnoreCase(wxPayMockEnabled))
+        {
+            errors.add("WX_PAY_MOCK_ENABLED 生产环境必须为 false");
+        }
+        if (isPlaceholder(wxPayMchId))
+        {
+            errors.add("WX_PAY_MCH_ID 未配置");
+        }
+        if (isPlaceholder(wxPayApiV3))
+        {
+            errors.add("WX_PAY_APIV3 未配置");
+        }
+        if (isBlank(wxPayNotify) || !wxPayNotify.startsWith("https://"))
+        {
+            errors.add("WX_PAY_NOTIFY 必须配置为 HTTPS 回调地址");
+        }
+        if (isPlaceholder(wxPayPrivateKey))
+        {
+            errors.add("WX_PAY_PRIVATE_KEY 未配置");
+        }
+        if (isPlaceholder(wxPayCertSerial))
+        {
+            errors.add("WX_PAY_CERT_SERIAL 未配置");
         }
         if (isBlank(corsOrigins) || containsLocalhost(corsOrigins))
         {
@@ -113,6 +152,11 @@ public final class ProductionStartupCheck
     private static boolean isBlank(String value)
     {
         return value == null || value.trim().isEmpty();
+    }
+
+    private static boolean isPlaceholder(String value)
+    {
+        return isBlank(value) || value.startsWith("replace-with");
     }
 
     private static boolean containsLocalhost(String value)

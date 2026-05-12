@@ -31,8 +31,8 @@
 
     <select id="activeStats" resultType="map">
         select
-          sum(case when status = 1 then 1 else 0 end) as running,
-          sum(case when status = 2 then 1 else 0 end) as pending,
+          coalesce(sum(case when status = 1 then 1 else 0 end), 0) as running,
+          coalesce(sum(case when status = 2 then 1 else 0 end), 0) as pending,
           (select count(*) from fish_user where status = '0') as userCount
         from fish_order
     </select>

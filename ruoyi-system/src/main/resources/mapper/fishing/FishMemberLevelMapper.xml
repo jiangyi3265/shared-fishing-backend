@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishMemberLevelMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishMemberLevel" id="LevelResult">
+        <id     property="levelId"          column="level_id"/>
+        <result property="levelName"        column="level_name"/>
+        <result property="levelIcon"        column="level_icon"/>
+        <result property="minConsumeCents"  column="min_consume_cents"/>
+        <result property="discountRate"     column="discount_rate"/>
+        <result property="freeDeposit"      column="free_deposit"/>
+        <result property="priorityReserve"  column="priority_reserve"/>
+        <result property="extraBenefits"    column="extra_benefits"/>
+        <result property="sortNum"          column="sort_num"/>
+        <result property="status"           column="status"/>
+        <result property="createTime"       column="create_time"/>
+        <result property="updateTime"       column="update_time"/>
+    </resultMap>
+
+    <sql id="selectVo">
+        select level_id, level_name, level_icon, min_consume_cents, discount_rate,
+               free_deposit, priority_reserve, extra_benefits, sort_num, status, create_time, update_time
+        from fish_member_level
+    </sql>
+
+    <select id="selectList" parameterType="com.ruoyi.fishing.domain.FishMemberLevel" resultMap="LevelResult">
+        <include refid="selectVo"/>
+        <where>
+            <if test="levelName != null and levelName != ''">AND level_name like concat('%', #{levelName}, '%')</if>
+            <if test="status != null and status != ''">AND status = #{status}</if>
+        </where>
+        order by sort_num asc
+    </select>
+
+    <select id="selectAllActive" resultMap="LevelResult">
+        <include refid="selectVo"/> where status = '0' order by min_consume_cents asc
+    </select>
+
+    <select id="selectById" parameterType="Long" resultMap="LevelResult">
+        <include refid="selectVo"/> where level_id = #{levelId}
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishMemberLevel" useGeneratedKeys="true" keyProperty="levelId">
+        insert into fish_member_level (level_name, level_icon, min_consume_cents, discount_rate,
+            free_deposit, priority_reserve, extra_benefits, sort_num, status, create_time)
+        values (#{levelName}, #{levelIcon}, #{minConsumeCents}, #{discountRate},
+            #{freeDeposit}, #{priorityReserve}, #{extraBenefits}, #{sortNum}, #{status}, sysdate())
+    </insert>
+
+    <update id="update" parameterType="com.ruoyi.fishing.domain.FishMemberLevel">
+        update fish_member_level
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="levelName != null">level_name = #{levelName},</if>
+            <if test="levelIcon != null">level_icon = #{levelIcon},</if>
+            <if test="minConsumeCents != null">min_consume_cents = #{minConsumeCents},</if>
+            <if test="discountRate != null">discount_rate = #{discountRate},</if>
+            <if test="freeDeposit != null">free_deposit = #{freeDeposit},</if>
+            <if test="priorityReserve != null">priority_reserve = #{priorityReserve},</if>
+            <if test="extraBenefits != null">extra_benefits = #{extraBenefits},</if>
+            <if test="sortNum != null">sort_num = #{sortNum},</if>
+            <if test="status != null">status = #{status},</if>
+            update_time = sysdate()
+        </trim>
+        where level_id = #{levelId}
+    </update>
+
+    <delete id="deleteByIds" parameterType="Long">
+        delete from fish_member_level where level_id in
+        <foreach collection="array" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </delete>
+</mapper>

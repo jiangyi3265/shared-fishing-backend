@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishCatchCommentMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishCatchComment" id="CommentResult">
+        <id property="commentId" column="comment_id"/>
+        <result property="catchId" column="catch_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="nickname" column="nickname"/>
+        <result property="avatar" column="avatar"/>
+        <result property="replyToId" column="reply_to_id"/>
+        <result property="replyToUser" column="reply_to_user"/>
+        <result property="replyToNickname" column="reply_to_nickname"/>
+        <result property="content" column="content"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <select id="selectByCatchId" parameterType="Long" resultMap="CommentResult">
+        select c.comment_id, c.catch_id, c.user_id, u.nickname, u.avatar,
+               c.reply_to_id, c.reply_to_user, ru.nickname as reply_to_nickname,
+               c.content, c.status, c.create_time
+        from fish_catch_comment c
+        left join fish_user u on u.user_id = c.user_id
+        left join fish_user ru on ru.user_id = c.reply_to_user
+        where c.catch_id = #{catchId} and c.status = 1
+        order by c.create_time asc
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishCatchComment" useGeneratedKeys="true" keyProperty="commentId">
+        insert into fish_catch_comment (catch_id, user_id, reply_to_id, reply_to_user, content, status, create_time)
+        values (#{catchId}, #{userId}, #{replyToId}, #{replyToUser}, #{content}, 1, sysdate())
+    </insert>
+
+    <update id="delete" parameterType="Long">
+        update fish_catch_comment set status = 2 where comment_id = #{commentId}
+    </update>
+
+    <update id="incrementCommentCount">
+        update fish_catch_record set comment_count = comment_count + 1 where catch_id = #{catchId}
+    </update>
+
+    <update id="decrementCommentCount">
+        update fish_catch_record set comment_count = greatest(comment_count - 1, 0) where catch_id = #{catchId}
+    </update>
+</mapper>

@@ -20,8 +20,23 @@ import com.ruoyi.fishing.service.AppTokenService;
 import com.ruoyi.fishing.service.IFishAdService;
 import com.ruoyi.fishing.service.IFishBillingRuleService;
 import com.ruoyi.fishing.service.IFishCouponService;
+import com.ruoyi.fishing.domain.FishMallGoods;
+import com.ruoyi.fishing.domain.FishMallOrder;
+import com.ruoyi.fishing.domain.FishRechargeOrder;
+import com.ruoyi.fishing.service.IFishBalanceService;
+import com.ruoyi.fishing.service.IFishMallService;
 import com.ruoyi.fishing.service.IFishOrderService;
+import com.ruoyi.fishing.service.IFishRefundService;
 import com.ruoyi.fishing.service.IFishRegistrationService;
+import com.ruoyi.fishing.service.IFishStockingService;
+import com.ruoyi.fishing.service.IFishSpotService;
+import com.ruoyi.fishing.service.IFishCatchService;
+import com.ruoyi.fishing.service.IFishMemberLevelService;
+import com.ruoyi.fishing.service.IWeatherService;
+import com.ruoyi.fishing.service.IFishPointsService;
+import com.ruoyi.fishing.service.IFishGroupService;
+import com.ruoyi.fishing.service.IFishRentalService;
+import com.ruoyi.fishing.service.IFishCompetitionService;
 import com.ruoyi.fishing.service.IFishUserService;
 import com.ruoyi.fishing.service.IFishVenueService;
 import com.ruoyi.fishing.service.IWxAuthService;
@@ -30,6 +45,7 @@ import com.ruoyi.fishing.service.IWxPayService;
 /**
  * 小程序端开放接口
  */
+@Anonymous
 @RestController
 @RequestMapping("/app")
 public class AppApiController
@@ -52,6 +68,30 @@ public class AppApiController
     private IWxAuthService wxAuthService;
     @Autowired
     private IWxPayService wxPayService;
+    @Autowired
+    private IFishRefundService refundService;
+    @Autowired
+    private IFishMallService mallService;
+    @Autowired
+    private IFishBalanceService balanceService;
+    @Autowired
+    private IFishStockingService stockingService;
+    @Autowired
+    private IFishSpotService spotService;
+    @Autowired
+    private IFishCatchService catchService;
+    @Autowired
+    private IFishMemberLevelService memberLevelService;
+    @Autowired
+    private IWeatherService weatherService;
+    @Autowired
+    private IFishPointsService pointsService;
+    @Autowired
+    private IFishGroupService groupService;
+    @Autowired
+    private IFishRentalService rentalService;
+    @Autowired
+    private IFishCompetitionService competitionService;
     @Autowired
     private FishQrcodeMapper qrcodeMapper;
     @Autowired
@@ -100,6 +140,22 @@ public class AppApiController
         data.put("venue", v);
         if (v.getRuleId() != null) data.put("rule", ruleService.selectFishBillingRuleByRuleId(v.getRuleId()));
         return AjaxResult.success(data);
+    }
+
+    /** 放鱼记录（按钓场） */
+    @Anonymous
+    @GetMapping("/stocking/list")
+    public AjaxResult stockingList(@RequestParam(required = false) Long venueId)
+    {
+        return AjaxResult.success(stockingService.selectPublicByVenue(venueId));
+    }
+
+    /** 天气信息 */
+    @Anonymous
+    @GetMapping("/weather")
+    public AjaxResult weather(@RequestParam(required = false, defaultValue = "116.41,39.92") String location)
+    {
+        return AjaxResult.success(weatherService.getCurrentWeather(location));
     }
 
     /** 广告/活动列表 */
@@ -168,7 +224,7 @@ public class AppApiController
         return AjaxResult.success(orderService.finishOrder(userId));
     }
 
-    /** 支付 */
+    /** 支付（支持带 mallOrderIds 一并合并支付；支持 useBalance 余额抵扣） */
     @Anonymous
     @PostMapping("/order/pay")
     public AjaxResult pay(@RequestBody Map<String, Object> body)
@@ -176,8 +232,21 @@ public class AppApiController
         Long userId = parseLong(body.get("userId"));
         Long orderId = parseLong(body.get("orderId"));
         Long couponId = parseLong(body.get("couponId"));
+        boolean useBalance = Boolean.TRUE.equals(body.get("useBalance"))
+                || "true".equalsIgnoreCase(String.valueOf(body.get("useBalance")));
         if (userId == null || orderId == null) return AjaxResult.error("参数缺失");
         if (!isCurrentUser(userId)) return unauthorized();
+
+        java.util.List<Long> mallOrderIds = new java.util.ArrayList<>();
+        Object raw = body.get("mallOrderIds");
+        if (raw instanceof java.util.List)
+        {
+            for (Object o : (java.util.List<?>) raw)
+            {
+                Long mid = parseLong(o);
+                if (mid != null) mallOrderIds.add(mid);
+            }
+        }
 
         FishOrder order = orderService.selectFishOrderByOrderId(orderId);
         if (order == null) return AjaxResult.error("订单不存在");
@@ -187,13 +256,14 @@ public class AppApiController
         {
             FishUser user = userService.selectFishUserByUserId(userId);
             if (user == null) return AjaxResult.error("用户不存在");
-            FishOrder prepared = orderService.preparePayment(userId, orderId, couponId);
+            FishOrder prepared = orderService.preparePayment(userId, orderId, couponId, mallOrderIds, useBalance);
             int finalAmount = prepared.getAmountPaid() == null ? 0 : prepared.getAmountPaid();
             if (finalAmount <= 0)
             {
+                // 全额由余额 + 优惠券覆盖，直接走 markPaid（内部会扣余额）
                 orderService.markPaid(prepared.getOrderNo(), "ZERO_PAY");
                 Map<String, Object> data = new HashMap<>();
-                data.put("order", prepared);
+                data.put("order", orderService.selectFishOrderByOrderId(orderId));
                 data.put("needWxPay", false);
                 return AjaxResult.success(data);
             }
@@ -207,14 +277,14 @@ public class AppApiController
         }
 
         if (!wxPayService.isMockEnabled()) return AjaxResult.error("微信支付未配置");
-        FishOrder paid = orderService.pay(userId, orderId, couponId);
+        FishOrder paid = orderService.pay(userId, orderId, couponId, mallOrderIds, useBalance);
         Map<String, Object> data = new HashMap<>();
         data.put("order", paid);
         data.put("needWxPay", false);
         return AjaxResult.success(data);
     }
 
-    /** 微信支付异步通知 */
+    /** 微信支付异步通知（按订单号前缀分发：FD=钓场计时；M=商城） */
     @Anonymous
     @PostMapping("/order/pay/notify")
     public Map<String, Object> payNotify(HttpServletRequest request, @RequestBody String body)
@@ -225,7 +295,13 @@ public class AppApiController
         Map<String, Object> res = new HashMap<>();
         try {
             String orderNo = wxPayService.handleNotify(body, headers);
-            if (orderNo != null) orderService.markPaid(orderNo, headers.getOrDefault("wechatpay-serial", ""));
+            String tradeNo = headers.getOrDefault("wechatpay-serial", "");
+            if (orderNo != null)
+            {
+                if (orderNo.startsWith("R")) balanceService.markRechargePaid(orderNo, tradeNo);
+                else if (orderNo.startsWith("M")) mallService.markPaid(orderNo, tradeNo);
+                else orderService.markPaid(orderNo, tradeNo);
+            }
             res.put("code", "SUCCESS"); res.put("message", "成功");
         } catch (Exception e) {
             res.put("code", "FAIL"); res.put("message", "处理失败");
@@ -354,6 +430,284 @@ public class AppApiController
         return AjaxResult.success(couponService.selectAvailableCoupons(userId));
     }
 
+    /** 申请退款（钓场订单） */
+    @Anonymous
+    @PostMapping("/refund/apply")
+    public AjaxResult applyRefund(@RequestBody Map<String, Object> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        Long orderId = parseLong(body.get("orderId"));
+        if (orderId == null) return AjaxResult.error("参数缺失");
+        Integer amount = null;
+        Object a = body.get("applyAmountCents");
+        if (a instanceof Number) amount = ((Number) a).intValue();
+        else if (a != null) try { amount = Integer.parseInt(a.toString()); } catch (Exception ignore) {}
+        String reason = (String) body.get("reason");
+        return AjaxResult.success(refundService.applyRefund(userId, orderId, amount, reason));
+    }
+
+    /** 申请退款（商城订单） */
+    @Anonymous
+    @PostMapping("/mall/refund/apply")
+    public AjaxResult applyMallRefund(@RequestBody Map<String, Object> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        Long mallOrderId = parseLong(body.get("mallOrderId"));
+        if (mallOrderId == null) return AjaxResult.error("参数缺失");
+        Integer amount = null;
+        Object a = body.get("applyAmountCents");
+        if (a instanceof Number) amount = ((Number) a).intValue();
+        else if (a != null) try { amount = Integer.parseInt(a.toString()); } catch (Exception ignore) {}
+        String reason = (String) body.get("reason");
+        return AjaxResult.success(refundService.applyMallRefund(userId, mallOrderId, amount, reason));
+    }
+
+    /** 我的退款记录 */
+    @Anonymous
+    @GetMapping("/refund/my")
+    public AjaxResult myRefunds(@RequestParam Long userId)
+    {
+        if (!isCurrentUser(userId)) return unauthorized();
+        return AjaxResult.success(refundService.selectByUserId(userId));
+    }
+
+    // ===================== 商城 =====================
+
+    @Anonymous
+    @GetMapping("/mall/category/list")
+    public AjaxResult mallCategories()
+    {
+        return AjaxResult.success(mallService.listCategory(new com.ruoyi.fishing.domain.FishMallCategory()));
+    }
+
+    @Anonymous
+    @GetMapping("/mall/goods/list")
+    public AjaxResult mallGoods(@RequestParam(required = false) Long catId)
+    {
+        return AjaxResult.success(mallService.listActiveGoods(catId));
+    }
+
+    @Anonymous
+    @GetMapping("/mall/goods/{goodsId}")
+    public AjaxResult mallGoodsDetail(@PathVariable Long goodsId)
+    {
+        FishMallGoods g = mallService.getGoods(goodsId);
+        if (g == null) return AjaxResult.error("商品不存在");
+        return AjaxResult.success(g);
+    }
+
+    /** 提交商城订单：扣库存 + 生成订单 + 返回支付参数（mock 模式直接置已支付） */
+    @Anonymous
+    @PostMapping("/mall/order/submit")
+    public AjaxResult submitMallOrder(@RequestBody Map<String, Object> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> items = (List<Map<String, Object>>) body.get("items");
+        String remark = (String) body.get("remark");
+        Long venueId = parseLong(body.get("venueId"));
+        boolean useBalance = Boolean.TRUE.equals(body.get("useBalance"))
+                || "true".equalsIgnoreCase(String.valueOf(body.get("useBalance")));
+
+        FishMallOrder order = mallService.submitOrder(userId, items, remark, venueId, useBalance);
+        Map<String, Object> data = new HashMap<>();
+        data.put("order", order);
+
+        int total = order.getTotalCents() == null ? 0 : order.getTotalCents();
+        int balance = order.getBalanceCents() == null ? 0 : order.getBalanceCents();
+        int wxAmount = Math.max(0, total - balance);
+
+        // 全额免付（0 元 或 余额全覆盖）
+        if (wxAmount <= 0)
+        {
+            mallService.markPaid(order.getMallOrderNo(), "ZERO_PAY");
+            data.put("order", mallService.getOrder(order.getMallOrderId()));
+            data.put("needWxPay", false);
+            return AjaxResult.success(data);
+        }
+
+        if (wxPayService.isEnabled())
+        {
+            FishUser user = userService.selectFishUserByUserId(userId);
+            if (user == null) return AjaxResult.error("用户不存在");
+            Map<String, Object> prepay = wxPayService.createPrepay(order.getMallOrderNo(), wxAmount,
+                    user.getOpenid(), "钓场商城 · " + order.getMallOrderNo());
+            data.put("pay", prepay);
+            data.put("needWxPay", true);
+            return AjaxResult.success(data);
+        }
+
+        if (!wxPayService.isMockEnabled()) return AjaxResult.error("微信支付未配置");
+        FishMallOrder paid = mallService.markPaid(order.getMallOrderNo(), "MOCK" + System.currentTimeMillis());
+        data.put("order", paid);
+        data.put("needWxPay", false);
+        return AjaxResult.success(data);
+    }
+
+    @Anonymous
+    @GetMapping("/mall/order/my")
+    public AjaxResult myMallOrders()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(mallService.listMyOrders(userId));
+    }
+
+    @Anonymous
+    @GetMapping("/mall/order/{mallOrderId}")
+    public AjaxResult mallOrderDetail(@PathVariable Long mallOrderId)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        FishMallOrder o = mallService.getOrder(mallOrderId);
+        if (o == null) return AjaxResult.error("订单不存在");
+        if (!userId.equals(o.getUserId())) return unauthorized();
+        return AjaxResult.success(o);
+    }
+
+    // ===================== 储值钱包 =====================
+
+    /** 我的余额 + 最近流水 */
+    @Anonymous
+    @GetMapping("/wallet/info")
+    public AjaxResult walletInfo()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        Map<String, Object> data = new HashMap<>();
+        data.put("balance", balanceService.getBalance(userId));
+        data.put("logs", balanceService.recentLogs(userId));
+        return AjaxResult.success(data);
+    }
+
+    /** 充值套餐列表（仅上架） */
+    @Anonymous
+    @GetMapping("/wallet/plans")
+    public AjaxResult walletPlans()
+    {
+        return AjaxResult.success(balanceService.listActivePlans());
+    }
+
+    /**
+     * 发起充值：支持套餐(planId) 或 自定义金额(amountCents)。
+     * 返回充值订单 + wxpay 预支付参数，mock 模式下直接置完成并入账。
+     */
+    @Anonymous
+    @PostMapping("/wallet/recharge")
+    public AjaxResult recharge(@RequestBody Map<String, Object> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        Long planId = parseLong(body.get("planId"));
+        Object rawAmt = body.get("amountCents");
+        Integer customAmount = null;
+        if (rawAmt instanceof Number) customAmount = ((Number) rawAmt).intValue();
+        else if (rawAmt != null) try { customAmount = Integer.parseInt(rawAmt.toString()); } catch (Exception ignore) {}
+
+        FishRechargeOrder order = balanceService.createRechargeOrder(userId, planId, customAmount);
+        Map<String, Object> data = new HashMap<>();
+        data.put("order", order);
+
+        if (wxPayService.isEnabled())
+        {
+            FishUser user = userService.selectFishUserByUserId(userId);
+            if (user == null) return AjaxResult.error("用户不存在");
+            Map<String, Object> prepay = wxPayService.createPrepay(order.getRechargeNo(), order.getAmountCents(),
+                    user.getOpenid(), "钓场储值充值 · " + order.getRechargeNo());
+            data.put("pay", prepay);
+            data.put("needWxPay", true);
+            return AjaxResult.success(data);
+        }
+
+        if (!wxPayService.isMockEnabled()) return AjaxResult.error("微信支付未配置");
+        FishRechargeOrder paid = balanceService.markRechargePaid(order.getRechargeNo(), "MOCK" + System.currentTimeMillis());
+        data.put("order", paid);
+        data.put("needWxPay", false);
+        return AjaxResult.success(data);
+    }
+
+    /** 我的充值历史 */
+    @Anonymous
+    @GetMapping("/wallet/recharges")
+    public AjaxResult myRecharges()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(balanceService.listMyRechargeOrders(userId));
+    }
+
+    // ===================== 店员工作台 =====================
+
+    /** 当前用户是否为店员 + 最近 N 单已核销简报 */
+    @Anonymous
+    @GetMapping("/staff/info")
+    public AjaxResult staffInfo()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        FishUser user = userService.selectFishUserByUserId(userId);
+        if (user == null) return AjaxResult.error("用户不存在");
+        boolean staff = user.getIsStaff() != null && user.getIsStaff() == 1;
+        Map<String, Object> data = new HashMap<>();
+        data.put("isStaff", staff);
+        data.put("nickname", user.getNickname());
+        if (staff)
+        {
+            FishMallOrder q = new FishMallOrder();
+            q.setStatus(2);
+            // 借列表分页参数：当前实现 selectList 不分页，前端自行截取。简单做：直接调，前端取前 10
+            data.put("recent", mallService.listOrder(q));
+            // 待核销数量
+            FishMallOrder pendQ = new FishMallOrder();
+            pendQ.setStatus(1);
+            data.put("pendingCount", mallService.listOrder(pendQ).size());
+        }
+        return AjaxResult.success(data);
+    }
+
+    /** 店员核销 */
+    @Anonymous
+    @PostMapping("/staff/redeem")
+    public AjaxResult staffRedeem(@RequestBody Map<String, String> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        FishUser user = userService.selectFishUserByUserId(userId);
+        if (user == null || user.getIsStaff() == null || user.getIsStaff() != 1)
+        {
+            return AjaxResult.error(403, "无核销权限");
+        }
+        String code = body == null ? "" : body.getOrDefault("code", "");
+        FishMallOrder order = mallService.redeem(code, user.getNickname());
+        return AjaxResult.success(order);
+    }
+
+    /** 微信退款异步通知 */
+    @Anonymous
+    @PostMapping("/order/pay/refund/notify")
+    public Map<String, Object> refundNotify(HttpServletRequest req, @RequestBody String body)
+    {
+        Map<String, String> headers = new HashMap<>();
+        java.util.Enumeration<String> names = req.getHeaderNames();
+        while (names.hasMoreElements()) { String n = names.nextElement(); headers.put(n, req.getHeader(n)); }
+        Map<String, Object> res = new HashMap<>();
+        try {
+            IWxPayService.RefundCallback cb = wxPayService.handleRefundNotify(body, headers);
+            if (cb != null && cb.refundNo != null)
+            {
+                refundService.handleRefundCallback(cb.refundNo, cb.success, cb.wxRefundNo);
+            }
+            res.put("code", "SUCCESS"); res.put("message", "成功");
+        } catch (Exception e) {
+            res.put("code", "FAIL"); res.put("message", "处理失败");
+        }
+        return res;
+    }
+
     private Long parseLong(Object v)
     {
         if (v == null) return null;
@@ -375,5 +729,283 @@ public class AppApiController
     private AjaxResult unauthorized()
     {
         return AjaxResult.error(401, "请先登录");
+    }
+
+    // ===== 钓位预订 =====
+
+    @Anonymous
+    @GetMapping("/spot/list")
+    public AjaxResult spotList(@RequestParam Long venueId)
+    {
+        return AjaxResult.success(spotService.selectAvailableByVenue(venueId));
+    }
+
+    @PostMapping("/reservation/submit")
+    public AjaxResult reservationSubmit(@RequestBody Map<String, Object> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        if (body.get("venueId") == null || body.get("spotId") == null || body.get("reserveDate") == null)
+            return AjaxResult.error("参数缺失");
+        Long venueId = Long.valueOf(body.get("venueId").toString());
+        Long spotId = Long.valueOf(body.get("spotId").toString());
+        String reserveDate = body.get("reserveDate").toString();
+        String timeSlot = body.getOrDefault("timeSlot", "").toString();
+        return AjaxResult.success(spotService.submitReservation(userId, venueId, spotId, reserveDate, timeSlot));
+    }
+
+    @GetMapping("/reservation/mine")
+    public AjaxResult reservationMine()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(spotService.selectReservationsByUser(userId));
+    }
+
+    @PutMapping("/reservation/cancel/{id}")
+    public AjaxResult reservationCancel(@PathVariable Long id)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(spotService.cancelReservation(id, userId, "用户取消"));
+    }
+
+    // ===== 钓获打卡 =====
+
+    @Anonymous
+    @GetMapping("/catch/list")
+    public AjaxResult catchList()
+    {
+        Long userId = currentUserId();
+        return AjaxResult.success(catchService.selectPublicList(userId));
+    }
+
+    @GetMapping("/catch/mine")
+    public AjaxResult catchMine()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(catchService.selectByUser(userId));
+    }
+
+    @PostMapping("/catch/publish")
+    public AjaxResult catchPublish(@RequestBody com.ruoyi.fishing.domain.FishCatchRecord record)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        record.setUserId(userId);
+        return AjaxResult.success(catchService.publish(record));
+    }
+
+    @PostMapping("/catch/like/{catchId}")
+    public AjaxResult catchLike(@PathVariable Long catchId)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        int result = catchService.toggleLike(userId, catchId);
+        return AjaxResult.success(result == 1 ? "已点赞" : "已取消", result);
+    }
+
+    @Anonymous
+    @GetMapping("/catch/comments/{catchId}")
+    public AjaxResult catchComments(@PathVariable Long catchId)
+    {
+        return AjaxResult.success(catchService.getComments(catchId));
+    }
+
+    @PostMapping("/catch/comment")
+    public AjaxResult catchComment(@RequestBody Map<String, Object> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        if (body.get("catchId") == null || body.get("content") == null)
+            return AjaxResult.error("参数缺失");
+        Long catchId = Long.valueOf(body.get("catchId").toString());
+        String content = body.get("content").toString().trim();
+        if (content.isEmpty()) return AjaxResult.error("评论内容不能为空");
+        Long replyToId = body.containsKey("replyToId") && body.get("replyToId") != null ? Long.valueOf(body.get("replyToId").toString()) : null;
+        Long replyToUser = body.containsKey("replyToUser") && body.get("replyToUser") != null ? Long.valueOf(body.get("replyToUser").toString()) : null;
+        return AjaxResult.success(catchService.addComment(catchId, userId, content, replyToId, replyToUser));
+    }
+
+    // ===== 会员等级 =====
+
+    @Anonymous
+    @GetMapping("/member/levels")
+    public AjaxResult memberLevels()
+    {
+        return AjaxResult.success(memberLevelService.selectAllActive());
+    }
+
+    @GetMapping("/member/my")
+    public AjaxResult memberMy()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        memberLevelService.refreshUserLevel(userId);
+        Map<String, Object> data = new HashMap<>();
+        FishUser u = userService.selectFishUserByUserId(userId);
+        data.put("levelId", u.getMemberLevelId());
+        data.put("levelName", u.getMemberLevelName());
+        data.put("discountRate", memberLevelService.getUserDiscountRate(userId));
+        return AjaxResult.success(data);
+    }
+
+    // ===== 积分 =====
+
+    @GetMapping("/points/my")
+    public AjaxResult pointsMy()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        Map<String, Object> data = new HashMap<>();
+        data.put("points", pointsService.getUserPoints(userId));
+        data.put("exchanges", pointsService.selectExchangeByUser(userId));
+        return AjaxResult.success(data);
+    }
+
+    @Anonymous
+    @GetMapping("/points/goods")
+    public AjaxResult pointsGoods()
+    {
+        return AjaxResult.success(pointsService.selectGoodsActive());
+    }
+
+    @PostMapping("/points/checkin")
+    public AjaxResult pointsCheckin()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(pointsService.checkin(userId));
+    }
+
+    @GetMapping("/points/checkin/calendar")
+    public AjaxResult checkinCalendar(@RequestParam(required = false) String month)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(pointsService.checkinCalendar(userId, month));
+    }
+
+    @PostMapping("/points/exchange/{goodsId}")
+    public AjaxResult pointsExchange(@PathVariable Long goodsId)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(pointsService.exchange(userId, goodsId));
+    }
+
+    // ===== 拼场约钓 =====
+
+    @Anonymous
+    @GetMapping("/group/list")
+    public AjaxResult groupList(@RequestParam(required = false) Long venueId)
+    {
+        return AjaxResult.success(groupService.selectActiveList(venueId));
+    }
+
+    @GetMapping("/group/{id}")
+    public AjaxResult groupDetail(@PathVariable Long id)
+    {
+        return AjaxResult.success(groupService.selectById(id));
+    }
+
+    @GetMapping("/group/mine")
+    public AjaxResult groupMine()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(groupService.selectByUser(userId));
+    }
+
+    @PostMapping("/group/create")
+    public AjaxResult groupCreate(@RequestBody com.ruoyi.fishing.domain.FishGroupFishing g)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        g.setUserId(userId);
+        return AjaxResult.success(groupService.create(g));
+    }
+
+    @PostMapping("/group/join/{groupId}")
+    public AjaxResult groupJoin(@PathVariable Long groupId)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(groupService.join(groupId, userId));
+    }
+
+    @PostMapping("/group/quit/{groupId}")
+    public AjaxResult groupQuit(@PathVariable Long groupId)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(groupService.quit(groupId, userId));
+    }
+
+    @PostMapping("/group/cancel/{groupId}")
+    public AjaxResult groupCancelByUser(@PathVariable Long groupId)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(groupService.cancel(groupId, userId));
+    }
+
+    // ===== 装备租赁 =====
+
+    @Anonymous
+    @GetMapping("/rental/list")
+    public AjaxResult rentalList()
+    {
+        return AjaxResult.success(rentalService.selectGoodsAvailable());
+    }
+
+    @PostMapping("/rental/rent/{goodsId}")
+    public AjaxResult rentalRent(@PathVariable Long goodsId)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(rentalService.rent(userId, goodsId));
+    }
+
+    @GetMapping("/rental/mine")
+    public AjaxResult rentalMine()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(rentalService.selectOrdersByUser(userId));
+    }
+
+    // ===== 比赛 =====
+
+    @Anonymous
+    @GetMapping("/competition/list")
+    public AjaxResult competitionList(@RequestParam(required = false) Long venueId)
+    {
+        return AjaxResult.success(competitionService.selectActiveList(venueId));
+    }
+
+    @Anonymous
+    @GetMapping("/competition/{id}")
+    public AjaxResult competitionDetail(@PathVariable Long id)
+    {
+        return AjaxResult.success(competitionService.selectById(id));
+    }
+
+    @Anonymous
+    @GetMapping("/competition/ranking/{id}")
+    public AjaxResult competitionRanking(@PathVariable Long id)
+    {
+        return AjaxResult.success(competitionService.selectRanking(id));
+    }
+
+    @PostMapping("/competition/enter/{compId}")
+    public AjaxResult competitionEnter(@PathVariable Long compId, @RequestBody Map<String, String> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        String nickname = body.getOrDefault("nickname", "");
+        String phone = body.getOrDefault("phone", "");
+        return AjaxResult.success(competitionService.enter(compId, userId, nickname, phone));
     }
 }

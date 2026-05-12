@@ -10,13 +10,21 @@
         <result property="avatar"        column="avatar"/>
         <result property="phone"         column="phone"/>
         <result property="status"        column="status"/>
+        <result property="isStaff"       column="is_staff"/>
+        <result property="isBlacklist"   column="is_blacklist"/>
+        <result property="blacklistReason" column="blacklist_reason"/>
+        <result property="memberLevelId"   column="member_level_id"/>
+        <result property="memberLevelName" column="member_level_name"/>
+        <result property="points"          column="points"/>
         <result property="lastLoginTime" column="last_login_time"/>
         <result property="createTime"    column="create_time"/>
         <result property="updateTime"    column="update_time"/>
     </resultMap>
 
     <sql id="selectFishUserVo">
-        select user_id, openid, unionid, nickname, avatar, phone, status, last_login_time, create_time, update_time
+        select user_id, openid, unionid, nickname, avatar, phone, status, is_staff,
+               is_blacklist, blacklist_reason, member_level_id, member_level_name, points,
+               last_login_time, create_time, update_time
         from fish_user
     </sql>
 
@@ -51,6 +59,11 @@
             <if test="avatar != null">avatar = #{avatar},</if>
             <if test="phone != null">phone = #{phone},</if>
             <if test="status != null">status = #{status},</if>
+            <if test="isStaff != null">is_staff = #{isStaff},</if>
+            <if test="isBlacklist != null">is_blacklist = #{isBlacklist},</if>
+            <if test="blacklistReason != null">blacklist_reason = #{blacklistReason},</if>
+            <if test="memberLevelId != null">member_level_id = #{memberLevelId},</if>
+            <if test="memberLevelName != null">member_level_name = #{memberLevelName},</if>
             <if test="lastLoginTime != null">last_login_time = #{lastLoginTime},</if>
             update_time = sysdate()
         </trim>

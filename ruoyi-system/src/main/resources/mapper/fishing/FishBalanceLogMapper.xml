@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishBalanceLogMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishBalanceLog" id="R">
+        <id     property="logId"              column="log_id"/>
+        <result property="userId"             column="user_id"/>
+        <result property="deltaCents"         column="delta_cents"/>
+        <result property="balanceAfterCents"  column="balance_after_cents"/>
+        <result property="type"               column="type"/>
+        <result property="relatedOrderNo"     column="related_order_no"/>
+        <result property="relatedRechargeId"  column="related_recharge_id"/>
+        <result property="remark"             column="remark"/>
+        <result property="operator"           column="operator"/>
+        <result property="createTime"         column="create_time"/>
+        <result property="nickname"           column="nickname"/>
+    </resultMap>
+
+    <sql id="vo">
+        select l.log_id, l.user_id, l.delta_cents, l.balance_after_cents, l.type,
+               l.related_order_no, l.related_recharge_id, l.remark, l.operator, l.create_time,
+               u.nickname
+        from fish_balance_log l
+        left join fish_user u on l.user_id = u.user_id
+    </sql>
+
+    <select id="selectList" parameterType="com.ruoyi.fishing.domain.FishBalanceLog" resultMap="R">
+        <include refid="vo"/>
+        <where>
+            <if test="userId != null">AND l.user_id = #{userId}</if>
+            <if test="type != null and type != ''">AND l.type = #{type}</if>
+        </where>
+        order by l.log_id desc
+    </select>
+
+    <select id="selectByUser" resultMap="R">
+        <include refid="vo"/>
+        where l.user_id = #{userId}
+        order by l.log_id desc
+        limit 100
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishBalanceLog" useGeneratedKeys="true" keyProperty="logId">
+        insert into fish_balance_log (user_id, delta_cents, balance_after_cents, type, related_order_no, related_recharge_id, remark, operator, create_time)
+        values (#{userId}, #{deltaCents}, #{balanceAfterCents}, #{type}, #{relatedOrderNo}, #{relatedRechargeId}, #{remark}, #{operator}, sysdate())
+    </insert>
+</mapper>

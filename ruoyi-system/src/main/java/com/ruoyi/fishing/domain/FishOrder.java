@@ -45,6 +45,8 @@ public class FishOrder extends BaseEntity
 
     private Integer discountCents;
     private Integer amountPaid;
+    /** 使用余额抵扣(分)，总应付 = amountPaid + balanceCents */
+    private Integer balanceCents;
     private Long couponId;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
@@ -52,6 +54,9 @@ public class FishOrder extends BaseEntity
 
     private String payTradeNo;
     private String ruleSnapshot;
+
+    /** 合并支付的商城订单 ID，逗号分隔 */
+    private String mallOrderIds;
     private String cancelReason;
 
     private String venueName;
@@ -81,6 +86,8 @@ public class FishOrder extends BaseEntity
     public void setDiscountCents(Integer discountCents) { this.discountCents = discountCents; }
     public Integer getAmountPaid() { return amountPaid; }
     public void setAmountPaid(Integer amountPaid) { this.amountPaid = amountPaid; }
+    public Integer getBalanceCents() { return balanceCents; }
+    public void setBalanceCents(Integer balanceCents) { this.balanceCents = balanceCents; }
     public Long getCouponId() { return couponId; }
     public void setCouponId(Long couponId) { this.couponId = couponId; }
     public Date getPaidTime() { return paidTime; }
@@ -89,6 +96,8 @@ public class FishOrder extends BaseEntity
     public void setPayTradeNo(String payTradeNo) { this.payTradeNo = payTradeNo; }
     public String getRuleSnapshot() { return ruleSnapshot; }
     public void setRuleSnapshot(String ruleSnapshot) { this.ruleSnapshot = ruleSnapshot; }
+    public String getMallOrderIds() { return mallOrderIds; }
+    public void setMallOrderIds(String mallOrderIds) { this.mallOrderIds = mallOrderIds; }
     public String getCancelReason() { return cancelReason; }
     public void setCancelReason(String cancelReason) { this.cancelReason = cancelReason; }
     public String getVenueName() { return venueName; }

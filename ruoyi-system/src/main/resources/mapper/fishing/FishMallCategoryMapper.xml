@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishMallCategoryMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishMallCategory" id="R">
+        <id     property="catId"   column="cat_id"/>
+        <result property="name"    column="name"/>
+        <result property="icon"    column="icon"/>
+        <result property="sort"    column="sort"/>
+        <result property="status"  column="status"/>
+        <result property="createBy"   column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy"   column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <sql id="cols">cat_id, name, icon, sort, status, create_by, create_time, update_by, update_time</sql>
+
+    <select id="selectById" resultMap="R">
+        select <include refid="cols"/> from fish_mall_category where cat_id = #{catId}
+    </select>
+
+    <select id="selectList" parameterType="com.ruoyi.fishing.domain.FishMallCategory" resultMap="R">
+        select <include refid="cols"/> from fish_mall_category
+        <where>
+            <if test="name != null and name != ''">AND name like concat('%', #{name}, '%')</if>
+            <if test="status != null and status != ''">AND status = #{status}</if>
+        </where>
+        order by sort asc, cat_id asc
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishMallCategory" useGeneratedKeys="true" keyProperty="catId">
+        insert into fish_mall_category (name, icon, sort, status, create_by, create_time)
+        values (#{name}, #{icon}, #{sort}, #{status}, #{createBy}, sysdate())
+    </insert>
+
+    <update id="update" parameterType="com.ruoyi.fishing.domain.FishMallCategory">
+        update fish_mall_category
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="name   != null">name = #{name},</if>
+            <if test="icon   != null">icon = #{icon},</if>
+            <if test="sort   != null">sort = #{sort},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            update_time = sysdate()
+        </trim>
+        where cat_id = #{catId}
+    </update>
+
+    <delete id="deleteByIds" parameterType="Long">
+        delete from fish_mall_category where cat_id in
+        <foreach collection="array" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </delete>
+</mapper>

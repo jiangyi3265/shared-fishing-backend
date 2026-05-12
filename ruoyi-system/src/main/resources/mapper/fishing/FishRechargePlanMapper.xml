@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishRechargePlanMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishRechargePlan" id="R">
+        <id     property="planId"      column="plan_id"/>
+        <result property="title"       column="title"/>
+        <result property="amountCents" column="amount_cents"/>
+        <result property="bonusCents"  column="bonus_cents"/>
+        <result property="badge"       column="badge"/>
+        <result property="sort"        column="sort"/>
+        <result property="status"      column="status"/>
+        <result property="createBy"    column="create_by"/>
+        <result property="createTime"  column="create_time"/>
+        <result property="updateBy"    column="update_by"/>
+        <result property="updateTime"  column="update_time"/>
+    </resultMap>
+
+    <sql id="cols">plan_id, title, amount_cents, bonus_cents, badge, sort, status, create_by, create_time, update_by, update_time</sql>
+
+    <select id="selectById" resultMap="R">
+        select <include refid="cols"/> from fish_recharge_plan where plan_id = #{planId}
+    </select>
+
+    <select id="selectList" parameterType="com.ruoyi.fishing.domain.FishRechargePlan" resultMap="R">
+        select <include refid="cols"/> from fish_recharge_plan
+        <where>
+            <if test="title != null and title != ''">AND title like concat('%', #{title}, '%')</if>
+            <if test="status != null and status != ''">AND status = #{status}</if>
+        </where>
+        order by sort asc, plan_id asc
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishRechargePlan" useGeneratedKeys="true" keyProperty="planId">
+        insert into fish_recharge_plan (title, amount_cents, bonus_cents, badge, sort, status, create_by, create_time)
+        values (#{title}, #{amountCents}, #{bonusCents}, #{badge}, #{sort}, #{status}, #{createBy}, sysdate())
+    </insert>
+
+    <update id="update" parameterType="com.ruoyi.fishing.domain.FishRechargePlan">
+        update fish_recharge_plan
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="title       != null">title = #{title},</if>
+            <if test="amountCents != null">amount_cents = #{amountCents},</if>
+            <if test="bonusCents  != null">bonus_cents = #{bonusCents},</if>
+            <if test="badge       != null">badge = #{badge},</if>
+            <if test="sort        != null">sort = #{sort},</if>
+            <if test="status      != null">status = #{status},</if>
+            <if test="updateBy    != null">update_by = #{updateBy},</if>
+            update_time = sysdate()
+        </trim>
+        where plan_id = #{planId}
+    </update>
+
+    <delete id="deleteByIds" parameterType="Long">
+        delete from fish_recharge_plan where plan_id in
+        <foreach collection="array" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </delete>
+</mapper>

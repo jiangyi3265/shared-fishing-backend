@@ -30,6 +30,14 @@ public class ProductionEnvironmentPostProcessor implements EnvironmentPostProces
         String tokenSecret = environment.getProperty("token.secret", "");
         String wxSecret = environment.getProperty("wx.miniapp.secret", "");
         String corsOrigins = environment.getProperty("cors.allowed-origin-patterns", "");
+        boolean wxMockEnabled = environment.getProperty("wx.miniapp.mock-enabled", Boolean.class, true);
+        boolean wxPayEnabled = environment.getProperty("wx.pay.enabled", Boolean.class, false);
+        boolean wxPayMockEnabled = environment.getProperty("wx.pay.mock-enabled", Boolean.class, true);
+        String wxPayMchId = environment.getProperty("wx.pay.mch-id", "");
+        String wxPayApiV3 = environment.getProperty("wx.pay.api-v3-key", "");
+        String wxPayNotify = environment.getProperty("wx.pay.notify-url", "");
+        String wxPayPrivateKey = environment.getProperty("wx.pay.private-key-path", "");
+        String wxPayCertSerial = environment.getProperty("wx.pay.cert-serial", "");
 
         if (isBlank(dbPassword) || DEV_DB_PASSWORD.equals(dbPassword))
         {
@@ -42,6 +50,38 @@ public class ProductionEnvironmentPostProcessor implements EnvironmentPostProces
         if (isBlank(wxSecret) || WX_SECRET_PLACEHOLDER.equals(wxSecret))
         {
             errors.add("WX_SECRET 未配置");
+        }
+        if (wxMockEnabled)
+        {
+            errors.add("WX_MOCK_ENABLED 生产环境必须为 false");
+        }
+        if (!wxPayEnabled)
+        {
+            errors.add("WX_PAY_ENABLED 生产环境必须为 true");
+        }
+        if (wxPayMockEnabled)
+        {
+            errors.add("WX_PAY_MOCK_ENABLED 生产环境必须为 false");
+        }
+        if (isPlaceholder(wxPayMchId))
+        {
+            errors.add("WX_PAY_MCH_ID 未配置");
+        }
+        if (isPlaceholder(wxPayApiV3))
+        {
+            errors.add("WX_PAY_APIV3 未配置");
+        }
+        if (isBlank(wxPayNotify) || !wxPayNotify.startsWith("https://"))
+        {
+            errors.add("WX_PAY_NOTIFY 必须配置为 HTTPS 回调地址");
+        }
+        if (isPlaceholder(wxPayPrivateKey))
+        {
+            errors.add("WX_PAY_PRIVATE_KEY 未配置");
+        }
+        if (isPlaceholder(wxPayCertSerial))
+        {
+            errors.add("WX_PAY_CERT_SERIAL 未配置");
         }
         if (isBlank(corsOrigins) || containsLocalhost(corsOrigins))
         {
@@ -70,6 +110,11 @@ public class ProductionEnvironmentPostProcessor implements EnvironmentPostProces
     private boolean isBlank(String value)
     {
         return value == null || value.trim().isEmpty();
+    }
+
+    private boolean isPlaceholder(String value)
+    {
+        return isBlank(value) || value.startsWith("replace-with");
     }
 
     private boolean containsLocalhost(String value)

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishRentalMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishRentalGoods" id="GoodsResult">
+        <id property="goodsId" column="goods_id"/><result property="name" column="name"/>
+        <result property="image" column="image"/><result property="category" column="category"/>
+        <result property="depositCents" column="deposit_cents"/><result property="rentCents" column="rent_cents"/>
+        <result property="rentUnit" column="rent_unit"/><result property="stock" column="stock"/>
+        <result property="description" column="description"/><result property="sortNum" column="sort_num"/>
+        <result property="status" column="status"/><result property="delFlag" column="del_flag"/>
+        <result property="createTime" column="create_time"/><result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <resultMap type="com.ruoyi.fishing.domain.FishRentalOrder" id="OrderResult">
+        <id property="orderId" column="order_id"/><result property="orderNo" column="order_no"/>
+        <result property="userId" column="user_id"/><result property="nickname" column="nickname"/>
+        <result property="goodsId" column="goods_id"/><result property="goodsName" column="goods_name"/>
+        <result property="depositCents" column="deposit_cents"/><result property="rentCents" column="rent_cents"/>
+        <result property="status" column="status"/><result property="rentTime" column="rent_time"/>
+        <result property="returnTime" column="return_time"/><result property="depositRefunded" column="deposit_refunded"/>
+        <result property="remark" column="remark"/><result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <select id="selectGoodsList" parameterType="com.ruoyi.fishing.domain.FishRentalGoods" resultMap="GoodsResult">
+        select * from fish_rental_goods where del_flag='0'
+        <if test="name != null and name != ''">AND name like concat('%',#{name},'%')</if>
+        <if test="category != null and category != ''">AND category = #{category}</if>
+        <if test="status != null and status != ''">AND status = #{status}</if>
+        order by sort_num asc
+    </select>
+    <select id="selectGoodsAvailable" resultMap="GoodsResult">
+        select * from fish_rental_goods where del_flag='0' and status='0' and stock > 0 order by sort_num asc
+    </select>
+    <select id="selectGoodsById" parameterType="Long" resultMap="GoodsResult">
+        select * from fish_rental_goods where goods_id=#{goodsId} and del_flag='0'
+    </select>
+    <insert id="insertGoods" parameterType="com.ruoyi.fishing.domain.FishRentalGoods" useGeneratedKeys="true" keyProperty="goodsId">
+        insert into fish_rental_goods(name,image,category,deposit_cents,rent_cents,rent_unit,stock,description,sort_num,status,create_time)
+        values(#{name},#{image},#{category},#{depositCents},#{rentCents},#{rentUnit},#{stock},#{description},#{sortNum},#{status},sysdate())
+    </insert>
+    <update id="updateGoods" parameterType="com.ruoyi.fishing.domain.FishRentalGoods">
+        update fish_rental_goods
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="name!=null">name=#{name},</if><if test="image!=null">image=#{image},</if>
+            <if test="category!=null">category=#{category},</if><if test="depositCents!=null">deposit_cents=#{depositCents},</if>
+            <if test="rentCents!=null">rent_cents=#{rentCents},</if><if test="rentUnit!=null">rent_unit=#{rentUnit},</if>
+            <if test="stock!=null">stock=#{stock},</if><if test="description!=null">description=#{description},</if>
+            <if test="sortNum!=null">sort_num=#{sortNum},</if><if test="status!=null">status=#{status},</if>
+            update_time=sysdate()
+        </trim>
+        where goods_id=#{goodsId}
+    </update>
+    <update id="deleteGoodsByIds" parameterType="Long">
+        update fish_rental_goods set del_flag='2' where goods_id in <foreach collection="array" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </update>
+    <update id="decreaseStock">update fish_rental_goods set stock=stock-1 where goods_id=#{goodsId} and stock>0</update>
+    <update id="increaseStock">update fish_rental_goods set stock=stock+1 where goods_id=#{goodsId}</update>
+
+    <select id="selectOrderList" parameterType="com.ruoyi.fishing.domain.FishRentalOrder" resultMap="OrderResult">
+        select o.*,u.nickname from fish_rental_order o left join fish_user u on u.user_id=o.user_id
+        <where><if test="userId!=null">AND o.user_id=#{userId}</if><if test="status!=null">AND o.status=#{status}</if></where>
+        order by o.create_time desc
+    </select>
+    <select id="selectOrderById" parameterType="Long" resultMap="OrderResult">
+        select o.*,u.nickname from fish_rental_order o left join fish_user u on u.user_id=o.user_id where o.order_id=#{orderId}
+    </select>
+    <select id="selectOrdersByUser" parameterType="Long" resultMap="OrderResult">
+        select o.*,u.nickname from fish_rental_order o left join fish_user u on u.user_id=o.user_id where o.user_id=#{userId} order by o.create_time desc limit 50
+    </select>
+    <insert id="insertOrder" parameterType="com.ruoyi.fishing.domain.FishRentalOrder" useGeneratedKeys="true" keyProperty="orderId">
+        insert into fish_rental_order(order_no,user_id,goods_id,goods_name,deposit_cents,rent_cents,status,rent_time,create_time)
+        values(#{orderNo},#{userId},#{goodsId},#{goodsName},#{depositCents},#{rentCents},0,sysdate(),sysdate())
+    </insert>
+    <update id="updateOrderStatus">update fish_rental_order set status=#{status},update_time=sysdate() where order_id=#{orderId}</update>
+    <update id="updateOrderReturn">update fish_rental_order set status=1,return_time=sysdate(),deposit_refunded=1,update_time=sysdate() where order_id=#{orderId}</update>
+</mapper>

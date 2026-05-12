@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishGroupFishingMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishGroupFishing" id="GroupResult">
+        <id property="groupId" column="group_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="nickname" column="nickname"/>
+        <result property="venueId" column="venue_id"/>
+        <result property="spotId" column="spot_id"/>
+        <result property="spotName" column="spot_name"/>
+        <result property="title" column="title"/>
+        <result property="fishingDate" column="fishing_date"/>
+        <result property="timeSlot" column="time_slot"/>
+        <result property="maxMembers" column="max_members"/>
+        <result property="currentCount" column="current_count"/>
+        <result property="description" column="description"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <resultMap type="com.ruoyi.fishing.domain.FishGroupMember" id="MemberResult">
+        <id property="id" column="id"/>
+        <result property="groupId" column="group_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="nickname" column="nickname"/>
+        <result property="avatar" column="avatar"/>
+        <result property="role" column="role"/>
+        <result property="status" column="status"/>
+        <result property="joinTime" column="join_time"/>
+    </resultMap>
+
+    <sql id="selectVo">
+        select g.group_id, g.user_id, u.nickname, g.venue_id, g.spot_id, s.spot_name,
+               g.title, g.fishing_date, g.time_slot, g.max_members, g.current_count,
+               g.description, g.status, g.create_time
+        from fish_group_fishing g
+        left join fish_user u on u.user_id = g.user_id
+        left join fish_spot s on s.spot_id = g.spot_id
+    </sql>
+
+    <select id="selectById" parameterType="Long" resultMap="GroupResult">
+        <include refid="selectVo"/> where g.group_id = #{groupId}
+    </select>
+
+    <select id="selectList" parameterType="com.ruoyi.fishing.domain.FishGroupFishing" resultMap="GroupResult">
+        <include refid="selectVo"/>
+        <where>
+            <if test="venueId != null">AND g.venue_id = #{venueId}</if>
+            <if test="status != null">AND g.status = #{status}</if>
+            <if test="userId != null">AND g.user_id = #{userId}</if>
+        </where>
+        order by g.fishing_date asc, g.create_time desc
+    </select>
+
+    <select id="selectActiveList" parameterType="Long" resultMap="GroupResult">
+        <include refid="selectVo"/>
+        where g.status in (0, 1)
+        <if test="_parameter != null">AND g.venue_id = #{venueId}</if>
+        order by g.fishing_date asc, g.create_time desc
+        limit 50
+    </select>
+
+    <select id="selectByUser" parameterType="Long" resultMap="GroupResult">
+        <include refid="selectVo"/>
+        where g.group_id in (select gm.group_id from fish_group_member gm where gm.user_id = #{userId} and gm.status = 0)
+        order by g.fishing_date desc limit 30
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishGroupFishing" useGeneratedKeys="true" keyProperty="groupId">
+        insert into fish_group_fishing (user_id, venue_id, spot_id, title, fishing_date, time_slot, max_members, current_count, description, status, create_time)
+        values (#{userId}, #{venueId}, #{spotId}, #{title}, #{fishingDate}, #{timeSlot}, #{maxMembers}, #{currentCount}, #{description}, #{status}, sysdate())
+    </insert>
+
+    <update id="updateStatus">
+        update fish_group_fishing set status = #{status}, update_time = sysdate() where group_id = #{groupId}
+    </update>
+    <update id="incrementCount">
+        update fish_group_fishing set current_count = current_count + 1, update_time = sysdate() where group_id = #{groupId}
+    </update>
+    <update id="decrementCount">
+        update fish_group_fishing set current_count = greatest(current_count - 1, 1), update_time = sysdate() where group_id = #{groupId}
+    </update>
+
+    <!-- 成员 -->
+    <select id="selectMembers" parameterType="Long" resultMap="MemberResult">
+        select m.id, m.group_id, m.user_id, u.nickname, u.avatar, m.role, m.status, m.join_time
+        from fish_group_member m left join fish_user u on u.user_id = m.user_id
+        where m.group_id = #{groupId} and m.status = 0
+        order by m.join_time asc
+    </select>
+    <select id="selectMember" resultMap="MemberResult">
+        select * from fish_group_member where group_id = #{groupId} and user_id = #{userId} and status = 0 limit 1
+    </select>
+    <insert id="insertMember" parameterType="com.ruoyi.fishing.domain.FishGroupMember">
+        insert into fish_group_member (group_id, user_id, role, status, join_time) values (#{groupId}, #{userId}, #{role}, 0, sysdate())
+    </insert>
+    <update id="updateMemberStatus">
+        update fish_group_member set status = #{status}, quit_time = sysdate() where group_id = #{groupId} and user_id = #{userId}
+    </update>
+</mapper>

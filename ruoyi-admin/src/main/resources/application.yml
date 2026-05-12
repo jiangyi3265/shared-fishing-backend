@@ -173,3 +173,8 @@ wx:
     # 证书序列号
     cert-serial: ${WX_PAY_CERT_SERIAL:}
 
+# 和风天气（免费版即可，不配则返回 mock 数据）
+weather:
+  qweather:
+    key: ${WEATHER_QWEATHER_KEY:}
+    baseUrl: https://devapi.qweather.com

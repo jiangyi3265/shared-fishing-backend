@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishReservationMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishReservation" id="ResvResult">
+        <id     property="reservationId" column="reservation_id"/>
+        <result property="reservationNo" column="reservation_no"/>
+        <result property="userId"        column="user_id"/>
+        <result property="nickname"      column="nickname"/>
+        <result property="venueId"       column="venue_id"/>
+        <result property="spotId"        column="spot_id"/>
+        <result property="spotName"      column="spot_name"/>
+        <result property="reserveDate"   column="reserve_date"/>
+        <result property="timeSlot"      column="time_slot"/>
+        <result property="depositCents"  column="deposit_cents"/>
+        <result property="status"        column="status"/>
+        <result property="cancelReason"  column="cancel_reason"/>
+        <result property="arriveTime"    column="arrive_time"/>
+        <result property="expireTime"    column="expire_time"/>
+        <result property="payTradeNo"    column="pay_trade_no"/>
+        <result property="refundStatus"  column="refund_status"/>
+        <result property="createTime"    column="create_time"/>
+        <result property="updateTime"    column="update_time"/>
+    </resultMap>
+
+    <sql id="selectVo">
+        select r.reservation_id, r.reservation_no, r.user_id, u.nickname,
+               r.venue_id, r.spot_id, s.spot_name, r.reserve_date, r.time_slot,
+               r.deposit_cents, r.status, r.cancel_reason, r.arrive_time, r.expire_time,
+               r.pay_trade_no, r.refund_status, r.create_time, r.update_time
+        from fish_reservation r
+        left join fish_user u on u.user_id = r.user_id
+        left join fish_spot s on s.spot_id = r.spot_id
+    </sql>
+
+    <select id="selectList" parameterType="com.ruoyi.fishing.domain.FishReservation" resultMap="ResvResult">
+        <include refid="selectVo"/>
+        <where>
+            <if test="userId != null">AND r.user_id = #{userId}</if>
+            <if test="venueId != null">AND r.venue_id = #{venueId}</if>
+            <if test="spotId != null">AND r.spot_id = #{spotId}</if>
+            <if test="status != null">AND r.status = #{status}</if>
+            <if test="params.beginTime != null and params.beginTime != ''">AND r.reserve_date &gt;= #{params.beginTime}</if>
+            <if test="params.endTime != null and params.endTime != ''">AND r.reserve_date &lt;= #{params.endTime}</if>
+        </where>
+        order by r.reserve_date desc, r.create_time desc
+    </select>
+
+    <select id="selectById" parameterType="Long" resultMap="ResvResult">
+        <include refid="selectVo"/> where r.reservation_id = #{reservationId}
+    </select>
+
+    <select id="selectByUser" parameterType="Long" resultMap="ResvResult">
+        <include refid="selectVo"/> where r.user_id = #{userId} order by r.create_time desc limit 50
+    </select>
+
+    <select id="selectBySpotAndDate" resultMap="ResvResult">
+        <include refid="selectVo"/>
+        where r.spot_id = #{spotId} and r.reserve_date = #{reserveDate}
+        and r.time_slot = #{timeSlot} and r.status in (0, 1)
+        limit 1
+    </select>
+
+    <select id="selectExpired" resultMap="ResvResult">
+        <include refid="selectVo"/>
+        where r.status in (0, 1) and r.expire_time &lt;= #{now}
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishReservation" useGeneratedKeys="true" keyProperty="reservationId">
+        insert into fish_reservation (reservation_no, user_id, venue_id, spot_id, reserve_date,
+            time_slot, deposit_cents, status, expire_time, create_time)
+        values (#{reservationNo}, #{userId}, #{venueId}, #{spotId}, #{reserveDate},
+            #{timeSlot}, #{depositCents}, #{status}, #{expireTime}, sysdate())
+    </insert>
+
+    <update id="updateStatus">
+        update fish_reservation set status = #{status}, update_time = sysdate() where reservation_id = #{reservationId}
+    </update>
+
+    <update id="updateArriveTime">
+        update fish_reservation set status = 2, arrive_time = #{arriveTime}, update_time = sysdate() where reservation_id = #{reservationId}
+    </update>
+
+    <update id="batchExpire">
+        update fish_reservation set status = 4, update_time = sysdate()
+        where status in (0, 1) and expire_time &lt;= #{now}
+    </update>
+</mapper>

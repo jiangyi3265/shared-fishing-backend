@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishRefundMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishRefund" id="FishRefundResult">
+        <id     property="refundId"           column="refund_id"/>
+        <result property="refundNo"           column="refund_no"/>
+        <result property="orderId"            column="order_id"/>
+        <result property="orderNo"            column="order_no"/>
+        <result property="userId"             column="user_id"/>
+        <result property="orderType"          column="order_type"/>
+        <result property="applyAmountCents"   column="apply_amount_cents"/>
+        <result property="refundAmountCents"  column="refund_amount_cents"/>
+        <result property="reason"             column="reason"/>
+        <result property="status"             column="status"/>
+        <result property="auditRemark"        column="audit_remark"/>
+        <result property="auditBy"            column="audit_by"/>
+        <result property="auditTime"          column="audit_time"/>
+        <result property="wxRefundNo"         column="wx_refund_no"/>
+        <result property="finishTime"         column="finish_time"/>
+        <result property="createBy"           column="create_by"/>
+        <result property="createTime"         column="create_time"/>
+        <result property="updateBy"           column="update_by"/>
+        <result property="updateTime"         column="update_time"/>
+        <result property="nickname"           column="nickname"/>
+        <result property="venueName"          column="venue_name"/>
+    </resultMap>
+
+    <sql id="selectFishRefundVo">
+        select r.refund_id, r.refund_no, r.order_id, r.order_no, r.user_id,
+               r.order_type,
+               r.apply_amount_cents, r.refund_amount_cents, r.reason, r.status,
+               r.audit_remark, r.audit_by, r.audit_time, r.wx_refund_no, r.finish_time,
+               r.create_by, r.create_time, r.update_by, r.update_time,
+               u.nickname as nickname, v.name as venue_name
+        from fish_refund r
+        left join fish_order o on r.order_id = o.order_id and r.order_type = 'fishing'
+        left join fish_user  u on r.user_id  = u.user_id
+        left join fish_venue v on o.venue_id = v.venue_id
+    </sql>
+
+    <select id="selectFishRefundList" parameterType="com.ruoyi.fishing.domain.FishRefund" resultMap="FishRefundResult">
+        <include refid="selectFishRefundVo"/>
+        <where>
+            <if test="refundNo != null and refundNo != ''">AND r.refund_no like concat('%', #{refundNo}, '%')</if>
+            <if test="orderNo  != null and orderNo  != ''">AND r.order_no  like concat('%', #{orderNo}, '%')</if>
+            <if test="userId   != null">AND r.user_id = #{userId}</if>
+            <if test="orderType != null and orderType != ''">AND r.order_type = #{orderType}</if>
+            <if test="status   != null">AND r.status  = #{status}</if>
+            <if test="params.beginTime != null and params.beginTime != ''">AND r.create_time &gt;= #{params.beginTime}</if>
+            <if test="params.endTime != null and params.endTime != ''">AND r.create_time &lt;= #{params.endTime}</if>
+        </where>
+        order by r.refund_id desc
+    </select>
+
+    <select id="selectFishRefundByRefundId" parameterType="Long" resultMap="FishRefundResult">
+        <include refid="selectFishRefundVo"/>
+        where r.refund_id = #{refundId}
+    </select>
+
+    <select id="selectFishRefundByRefundNo" resultMap="FishRefundResult">
+        <include refid="selectFishRefundVo"/>
+        where r.refund_no = #{refundNo}
+    </select>
+
+    <select id="selectActiveRefundByOrderId" resultMap="FishRefundResult">
+        <include refid="selectFishRefundVo"/>
+        where r.order_id = #{orderId} and r.status in (0, 1)
+              <if test="orderType != null and orderType != ''">AND r.order_type = #{orderType}</if>
+        order by r.refund_id desc limit 1
+    </select>
+
+    <select id="selectByUserId" resultMap="FishRefundResult">
+        <include refid="selectFishRefundVo"/>
+        where r.user_id = #{userId}
+        order by r.refund_id desc
+    </select>
+
+    <insert id="insertFishRefund" parameterType="com.ruoyi.fishing.domain.FishRefund" useGeneratedKeys="true" keyProperty="refundId">
+        insert into fish_refund
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            refund_no, order_id, order_no, user_id,
+            <if test="orderType != null and orderType != ''">order_type,</if>
+            apply_amount_cents,
+            <if test="refundAmountCents != null">refund_amount_cents,</if>
+            <if test="reason != null">reason,</if>
+            status, create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            #{refundNo}, #{orderId}, #{orderNo}, #{userId},
+            <if test="orderType != null and orderType != ''">#{orderType},</if>
+            #{applyAmountCents},
+            <if test="refundAmountCents != null">#{refundAmountCents},</if>
+            <if test="reason != null">#{reason},</if>
+            #{status}, sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateFishRefund" parameterType="com.ruoyi.fishing.domain.FishRefund">
+        update fish_refund
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="status            != null">status = #{status},</if>
+            <if test="refundAmountCents != null">refund_amount_cents = #{refundAmountCents},</if>
+            <if test="auditRemark       != null">audit_remark = #{auditRemark},</if>
+            <if test="auditBy           != null">audit_by = #{auditBy},</if>
+            <if test="auditTime         != null">audit_time = #{auditTime},</if>
+            <if test="wxRefundNo        != null">wx_refund_no = #{wxRefundNo},</if>
+            <if test="finishTime        != null">finish_time = #{finishTime},</if>
+            <if test="updateBy          != null">update_by = #{updateBy},</if>
+            update_time = sysdate()
+        </trim>
+        where refund_id = #{refundId}
+    </update>
+
+    <update id="updateStatusWithGuard">
+        update fish_refund set status = #{newStatus}, update_time = sysdate()
+        where refund_id = #{refundId} and status = #{expectedStatus}
+    </update>
+
+    <delete id="deleteFishRefundByRefundIds" parameterType="Long">
+        delete from fish_refund where refund_id in
+        <foreach collection="array" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </delete>
+
+</mapper>

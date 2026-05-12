@@ -11,6 +11,7 @@ import com.ruoyi.fishing.domain.FishRegistration;
 import com.ruoyi.fishing.mapper.FishAdMapper;
 import com.ruoyi.fishing.mapper.FishRegistrationMapper;
 import com.ruoyi.fishing.service.IFishRegistrationService;
+import com.ruoyi.fishing.service.IFishUserService;
 
 @Service
 public class FishRegistrationServiceImpl implements IFishRegistrationService
@@ -20,6 +21,9 @@ public class FishRegistrationServiceImpl implements IFishRegistrationService
 
     @Autowired
     private FishAdMapper adMapper;
+
+    @Autowired
+    private IFishUserService userService;
 
     @Override
     public FishRegistration selectFishRegistrationByRegId(Long regId) { return regMapper.selectFishRegistrationByRegId(regId); }
@@ -34,6 +38,8 @@ public class FishRegistrationServiceImpl implements IFishRegistrationService
     @Transactional
     public FishRegistration submit(Long adId, Long userId, String name, String phone, String remark)
     {
+        userService.assertNotBlacklisted(userId);
+
         FishAd ad = adMapper.selectFishAdByAdId(adId);
         if (ad == null || !"activity".equals(ad.getAdType())) throw new ServiceException("活动不存在");
         if ("1".equals(ad.getStatus())) throw new ServiceException("活动已停用");
