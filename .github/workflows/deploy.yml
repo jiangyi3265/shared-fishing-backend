@@ -12,6 +12,7 @@ concurrency:
 env:
   DEPLOY_DIR: /www/wwwroot/dyjava
   JAR_NAME: dy.jar
+  ARCHIVE_NAME: backend-deploy.tar.gz
 
 jobs:
   deploy:
@@ -39,14 +40,16 @@ jobs:
             cp ry.sh deploy/ry.sh
           fi
           ls -lh deploy
+          tar -czf "${ARCHIVE_NAME}" -C deploy .
+          ls -lh "${ARCHIVE_NAME}"
 
       - name: Install SSH helper
         run: |
           sudo apt-get update
-          sudo apt-get install -y sshpass rsync
+          sudo apt-get install -y sshpass
 
       - name: Upload artifact
-        timeout-minutes: 25
+        timeout-minutes: 60
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
@@ -57,16 +60,10 @@ jobs:
           : "${SSH_USER:?Missing SSH_USER secret}"
           : "${SSH_PASSWORD:?Missing SSH_PASSWORD secret}"
           SSH_PORT="${SSH_PORT:-22}"
-          SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
-          SSH_CMD="ssh ${SSH_OPTS} -p ${SSH_PORT}"
+          SSH_OPTS="-C -o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_DIR}'"
-          if sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "command -v rsync >/dev/null 2>&1"; then
-            sshpass -p "${SSH_PASSWORD}" rsync -av --partial --delay-updates --info=progress2,stats2 -e "${SSH_CMD}" deploy/ "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/"
-          else
-            echo "Remote rsync not found, falling back to scp."
-            sshpass -p "${SSH_PASSWORD}" scp ${SSH_OPTS} -P "${SSH_PORT}" deploy/* "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/"
-          fi
+          sshpass -p "${SSH_PASSWORD}" scp ${SSH_OPTS} -P "${SSH_PORT}" "${ARCHIVE_NAME}" "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/${ARCHIVE_NAME}"
 
       - name: Deploy and restart service
         timeout-minutes: 5
@@ -84,12 +81,11 @@ jobs:
           SERVICE_NAME="${BACKEND_SERVICE:-fishing-backend}"
           SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
-          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' JAR_NAME='${JAR_NAME}' SERVICE_NAME='${SERVICE_NAME}' bash -s" <<'EOF'
+          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' JAR_NAME='${JAR_NAME}' ARCHIVE_NAME='${ARCHIVE_NAME}' SERVICE_NAME='${SERVICE_NAME}' bash -s" <<'EOF'
           set -euo pipefail
           cd "${DEPLOY_DIR}"
-          if [ -f "${JAR_NAME}.upload" ]; then
-            mv "${JAR_NAME}.upload" "${JAR_NAME}"
-          fi
+          tar -xzf "${ARCHIVE_NAME}" -C "${DEPLOY_DIR}"
+          rm -f "${ARCHIVE_NAME}"
           ls -lh "${JAR_NAME}"
 
           if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${SERVICE_NAME}.service" --no-legend | grep -q "${SERVICE_NAME}.service"; then
