@@ -11,8 +11,9 @@ concurrency:
 
 env:
   DEPLOY_DIR: /www/wwwroot/dyjava
+  SOURCE_ROOT: /www/wwwroot/dyjava-source
   JAR_NAME: dy.jar
-  ARCHIVE_NAME: backend-deploy.tar.gz
+  SOURCE_ARCHIVE: backend-source.tar.gz
 
 jobs:
   deploy:
@@ -32,24 +33,23 @@ jobs:
       - name: Build
         run: mvn -B -DskipTests clean package
 
-      - name: Package artifact
+      - name: Package source
         run: |
-          mkdir -p deploy
-          cp "ruoyi-admin/target/${JAR_NAME}" "deploy/${JAR_NAME}"
-          if [ -f ry.sh ]; then
-            cp ry.sh deploy/ry.sh
-          fi
-          ls -lh deploy
-          tar -czf "${ARCHIVE_NAME}" -C deploy .
-          ls -lh "${ARCHIVE_NAME}"
+          tar \
+            --exclude='.git' \
+            --exclude='*/target' \
+            --exclude='*/target/*' \
+            --exclude="${SOURCE_ARCHIVE}" \
+            -czf "${SOURCE_ARCHIVE}" .
+          ls -lh "${SOURCE_ARCHIVE}"
 
       - name: Install SSH helper
         run: |
           sudo apt-get update
           sudo apt-get install -y sshpass
 
-      - name: Upload artifact
-        timeout-minutes: 60
+      - name: Upload source
+        timeout-minutes: 10
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
@@ -63,10 +63,10 @@ jobs:
           SSH_OPTS="-C -o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_DIR}'"
-          sshpass -p "${SSH_PASSWORD}" scp ${SSH_OPTS} -P "${SSH_PORT}" "${ARCHIVE_NAME}" "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/${ARCHIVE_NAME}"
+          sshpass -p "${SSH_PASSWORD}" scp ${SSH_OPTS} -P "${SSH_PORT}" "${SOURCE_ARCHIVE}" "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/${SOURCE_ARCHIVE}"
 
-      - name: Deploy and restart service
-        timeout-minutes: 5
+      - name: Build on server and restart
+        timeout-minutes: 45
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
@@ -81,11 +81,39 @@ jobs:
           SERVICE_NAME="${BACKEND_SERVICE:-fishing-backend}"
           SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
-          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' JAR_NAME='${JAR_NAME}' ARCHIVE_NAME='${ARCHIVE_NAME}' SERVICE_NAME='${SERVICE_NAME}' bash -s" <<'EOF'
+          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' SOURCE_ROOT='${SOURCE_ROOT}' JAR_NAME='${JAR_NAME}' SOURCE_ARCHIVE='${SOURCE_ARCHIVE}' COMMIT_SHA='${GITHUB_SHA}' SERVICE_NAME='${SERVICE_NAME}' bash -s" <<'EOF'
           set -euo pipefail
+          RELEASE_DIR="${SOURCE_ROOT}/${COMMIT_SHA}"
+          case "${RELEASE_DIR}" in
+            "${SOURCE_ROOT}"/*) ;;
+            *) echo "Invalid release directory: ${RELEASE_DIR}"; exit 1 ;;
+          esac
+
+          mkdir -p "${DEPLOY_DIR}" "${SOURCE_ROOT}"
+          rm -rf "${RELEASE_DIR}"
+          mkdir -p "${RELEASE_DIR}"
+          tar -xzf "${DEPLOY_DIR}/${SOURCE_ARCHIVE}" -C "${RELEASE_DIR}"
+          rm -f "${DEPLOY_DIR}/${SOURCE_ARCHIVE}"
+
+          if ! command -v mvn >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+              apt-get update
+              apt-get install -y maven
+            elif command -v yum >/dev/null 2>&1; then
+              yum install -y maven
+            else
+              echo "mvn command not found and no supported package manager is available."
+              exit 1
+            fi
+          fi
+
+          cd "${RELEASE_DIR}"
+          mvn -B -DskipTests clean package
+          cp "ruoyi-admin/target/${JAR_NAME}" "${DEPLOY_DIR}/${JAR_NAME}"
+          if [ -f ry.sh ]; then
+            cp ry.sh "${DEPLOY_DIR}/ry.sh"
+          fi
           cd "${DEPLOY_DIR}"
-          tar -xzf "${ARCHIVE_NAME}" -C "${DEPLOY_DIR}"
-          rm -f "${ARCHIVE_NAME}"
           ls -lh "${JAR_NAME}"
 
           if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${SERVICE_NAME}.service" --no-legend | grep -q "${SERVICE_NAME}.service"; then
