@@ -6,7 +6,7 @@ spring:
         druid:
             # 主库数据源
             master:
-                url: jdbc:mysql://${DB_HOST:101.42.94.41}:${DB_PORT:3306}/${DB_NAME:diaoyu}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=GMT%2B8
+                url: jdbc:mysql://${DB_HOST:101.42.94.41}:${DB_PORT:3306}/${DB_NAME:diaoyu}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2B8
                 username: ${DB_USER:diaoyu}
                 password: ${DB_PASSWORD:123456}
             # 从库数据源
