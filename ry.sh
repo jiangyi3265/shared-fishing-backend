@@ -7,6 +7,10 @@ JVM_OPTS="-Dname=$AppName -Duser.timezone=Asia/Shanghai -Xms512m -Xmx1024m -XX:M
 APP_HOME=`pwd`
 LOG_PATH=$APP_HOME/logs/$AppName.log
 
+query(){
+    PID=`ps -eo pid=,args= | awk -v app="$AppName" '$0 ~ /[j]ava/ && index($0, app) {print $1; exit}'`
+}
+
 if [ "$1" = "" ];
 then
     echo -e "\033[0;31m 未输入操作名 \033[0m  \033[0;34m {start|stop|restart|status} \033[0m"
@@ -21,12 +25,13 @@ fi
 
 function start()
 {
-    PID=`ps -ef |grep java|grep $AppName|grep -v grep|awk '{print $2}'`
+    query
 
 	if [ x"$PID" != x"" ]; then
 	    echo "$AppName is running..."
 	else
-		nohup java $JVM_OPTS -jar $AppName > /dev/null 2>&1 &
+		mkdir -p "$APP_HOME/logs"
+		nohup java $JVM_OPTS -jar $AppName > "$LOG_PATH" 2>&1 &
 		echo "Start $AppName success..."
 	fi
 }
@@ -34,11 +39,6 @@ function start()
 function stop()
 {
     echo "Stop $AppName"
-
-	PID=""
-	query(){
-		PID=`ps -ef |grep java|grep $AppName|grep -v grep|awk '{print $2}'`
-	}
 
 	query
 	if [ x"$PID" != x"" ]; then
@@ -64,8 +64,8 @@ function restart()
 
 function status()
 {
-    PID=`ps -ef |grep java|grep $AppName|grep -v grep|wc -l`
-    if [ $PID != 0 ];then
+    query
+    if [ x"$PID" != x"" ];then
         echo "$AppName is running..."
     else
         echo "$AppName is not running..."
