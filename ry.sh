@@ -7,8 +7,21 @@ JVM_OPTS="-Dname=$AppName -Duser.timezone=Asia/Shanghai -Xms512m -Xmx1024m -XX:M
 APP_HOME=`pwd`
 LOG_PATH=$APP_HOME/logs/$AppName.log
 
+if [ -f "$APP_HOME/.env.production" ]; then
+    set -a
+    . "$APP_HOME/.env.production"
+    set +a
+elif [ -f "$APP_HOME/.env" ]; then
+    set -a
+    . "$APP_HOME/.env"
+    set +a
+fi
+
+: "${CORS_ALLOWED_ORIGINS:=https://ht.diaoyuus.cn,https://www.diaoyuus.cn}"
+export CORS_ALLOWED_ORIGINS
+
 query(){
-    PID=`ps -eo pid=,args= | awk -v app="$AppName" '$0 ~ /[j]ava/ && index($0, app) {print $1; exit}'`
+    PID=`ps -eo pid=,comm=,args= | awk -v app="$AppName" '$2 ~ /^java/ && index($0, app) {print $1; exit}'`
 }
 
 if [ "$1" = "" ];
