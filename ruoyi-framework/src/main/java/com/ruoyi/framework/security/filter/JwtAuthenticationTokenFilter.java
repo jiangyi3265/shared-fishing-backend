@@ -31,6 +31,18 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException
     {
+        String requestURI = request.getRequestURI();
+        String contextPath = request.getContextPath();
+        if (contextPath != null && !contextPath.isEmpty() && requestURI.startsWith(contextPath))
+        {
+            requestURI = requestURI.substring(contextPath.length());
+        }
+        if ("/app".equals(requestURI) || requestURI.startsWith("/app/"))
+        {
+            chain.doFilter(request, response);
+            return;
+        }
+
         LoginUser loginUser = tokenService.getLoginUser(request);
         if (StringUtils.isNotNull(loginUser) && StringUtils.isNull(SecurityUtils.getAuthentication()))
         {
