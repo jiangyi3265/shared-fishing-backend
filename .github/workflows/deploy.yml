@@ -35,12 +35,14 @@ jobs:
 
       - name: Package source
         run: |
+          SOURCE_ARCHIVE_PATH="/tmp/${SOURCE_ARCHIVE}"
+          rm -f "${SOURCE_ARCHIVE_PATH}"
           tar \
             --exclude='.git' \
             --exclude='*/target' \
             --exclude='*/target/*' \
-            --exclude="${SOURCE_ARCHIVE}" \
-            -czf "${SOURCE_ARCHIVE}" .
+            -czf "${SOURCE_ARCHIVE_PATH}" .
+          mv "${SOURCE_ARCHIVE_PATH}" "${SOURCE_ARCHIVE}"
           ls -lh "${SOURCE_ARCHIVE}"
 
       - name: Install SSH helper
