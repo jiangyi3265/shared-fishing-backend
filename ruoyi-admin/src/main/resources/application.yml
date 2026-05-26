@@ -151,7 +151,7 @@ xss:
 wx:
   miniapp:
     # 小程序 AppID（上线前务必改成真实 appid）
-    appid: ${WX_APPID:wxc0bf4aba46ccdfe9}
+    appid: ${WX_APPID:wx417e621a23525d47}
     # 小程序 AppSecret
     secret: ${WX_SECRET:please-replace-me}
     # 是否允许 mock openid，仅限本地开发；生产环境会强制要求关闭

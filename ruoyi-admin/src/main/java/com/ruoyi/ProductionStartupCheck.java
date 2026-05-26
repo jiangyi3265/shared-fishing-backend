@@ -34,6 +34,7 @@ public final class ProductionStartupCheck
         List<String> errors = new ArrayList<>();
         String dbPassword = configValue(argMap, "spring.datasource.druid.master.password", "DB_PASSWORD");
         String tokenSecret = configValue(argMap, "token.secret", "TOKEN_SECRET");
+        String wxAppid = configValue(argMap, "wx.miniapp.appid", "WX_APPID");
         String wxSecret = configValue(argMap, "wx.miniapp.secret", "WX_SECRET");
         String wxMockEnabled = configValue(argMap, "wx.miniapp.mock-enabled", "WX_MOCK_ENABLED");
         if (isBlank(wxMockEnabled))
@@ -64,6 +65,10 @@ public final class ProductionStartupCheck
         if (isBlank(wxSecret) || WX_SECRET_PLACEHOLDER.equals(wxSecret))
         {
             errors.add("WX_SECRET 未配置");
+        }
+        if (isBlank(wxAppid) || !wxAppid.startsWith("wx"))
+        {
+            errors.add("WX_APPID 未配置或格式不正确");
         }
         if ("true".equalsIgnoreCase(wxMockEnabled))
         {

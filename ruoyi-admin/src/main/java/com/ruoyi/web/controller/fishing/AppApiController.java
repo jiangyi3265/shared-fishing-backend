@@ -535,7 +535,7 @@ public class AppApiController
             FishUser user = userService.selectFishUserByUserId(userId);
             if (user == null) return AjaxResult.error("用户不存在");
             Map<String, Object> prepay = wxPayService.createPrepay(order.getMallOrderNo(), wxAmount,
-                    user.getOpenid(), "钓场商城 · " + order.getMallOrderNo());
+                    user.getOpenid(), "钓场补给 · " + order.getMallOrderNo());
             data.put("pay", prepay);
             data.put("needWxPay", true);
             return AjaxResult.success(data);
