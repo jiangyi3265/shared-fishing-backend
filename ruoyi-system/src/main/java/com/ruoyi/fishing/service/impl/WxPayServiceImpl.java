@@ -129,6 +129,10 @@ public class WxPayServiceImpl implements IWxPayService
         try {
             WxProperties.Miniapp mp = wxProperties.getMiniapp();
             WxProperties.Pay pay = wxProperties.getPay();
+            if (isBlank(mp.getAppid())) throw new ServiceException("微信支付下单失败：WX_APPID 未配置");
+            if (isBlank(openid)) throw new ServiceException("微信支付下单失败：当前用户缺少 openid，请重新登录");
+            if (isBlank(orderNo)) throw new ServiceException("微信支付下单失败：订单号为空");
+            if (amountCents <= 0) throw new ServiceException("微信支付下单失败：支付金额必须大于0");
 
             Class<?> reqCls = Class.forName("com.wechat.pay.java.service.payments.jsapi.model.PrepayRequest");
             Class<?> amtCls = Class.forName("com.wechat.pay.java.service.payments.jsapi.model.Amount");
@@ -161,9 +165,11 @@ public class WxPayServiceImpl implements IWxPayService
             resp.put("signType", invoke(result, "getSignType"));
             resp.put("paySign", invoke(result, "getPaySign"));
             return resp;
+        } catch (ServiceException e) {
+            throw e;
         } catch (Throwable t) {
             log.error("微信支付下单失败", t);
-            throw new ServiceException("微信支付下单失败");
+            throw new ServiceException("微信支付下单失败：" + rootMessage(t));
         }
     }
 
