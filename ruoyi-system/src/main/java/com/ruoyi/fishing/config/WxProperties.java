@@ -20,6 +20,8 @@ public class WxProperties
         private String appid;
         private String secret;
         private String code2sessionUrl = "https://api.weixin.qq.com/sns/jscode2session";
+        private String accessTokenUrl = "https://api.weixin.qq.com/cgi-bin/token";
+        private String wxaCodeUnlimitedUrl = "https://api.weixin.qq.com/wxa/getwxacodeunlimit";
         private boolean mockEnabled;
         private int tokenExpireDays = 30;
 
@@ -29,6 +31,10 @@ public class WxProperties
         public void setSecret(String secret) { this.secret = secret; }
         public String getCode2sessionUrl() { return code2sessionUrl; }
         public void setCode2sessionUrl(String code2sessionUrl) { this.code2sessionUrl = code2sessionUrl; }
+        public String getAccessTokenUrl() { return accessTokenUrl; }
+        public void setAccessTokenUrl(String accessTokenUrl) { this.accessTokenUrl = accessTokenUrl; }
+        public String getWxaCodeUnlimitedUrl() { return wxaCodeUnlimitedUrl; }
+        public void setWxaCodeUnlimitedUrl(String wxaCodeUnlimitedUrl) { this.wxaCodeUnlimitedUrl = wxaCodeUnlimitedUrl; }
         public boolean isMockEnabled() { return mockEnabled; }
         public void setMockEnabled(boolean mockEnabled) { this.mockEnabled = mockEnabled; }
         public int getTokenExpireDays() { return tokenExpireDays; }
