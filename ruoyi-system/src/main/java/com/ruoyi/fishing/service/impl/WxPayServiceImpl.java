@@ -1,5 +1,6 @@
 package com.ruoyi.fishing.service.impl;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -42,6 +43,7 @@ public class WxPayServiceImpl implements IWxPayService
     {
         if (initialized) return;
         if (!isEnabled()) return;
+        validatePayConfig();
         try {
             WxProperties.Pay pay = wxProperties.getPay();
             Class<?> cfgBuilder = Class.forName("com.wechat.pay.java.core.RSAAutoCertificateConfig$Builder");
@@ -69,6 +71,8 @@ public class WxPayServiceImpl implements IWxPayService
 
             initialized = true;
             log.info("WxPay SDK 初始化成功");
+        } catch (ServiceException e) {
+            throw e;
         } catch (ClassNotFoundException e) {
             log.error("wechatpay-java SDK 未在 classpath 中", e);
             throw new ServiceException("微信支付 SDK 未安装");
@@ -76,6 +80,28 @@ public class WxPayServiceImpl implements IWxPayService
             log.error("微信支付初始化失败", t);
             throw new ServiceException("微信支付初始化失败");
         }
+    }
+
+    private void validatePayConfig()
+    {
+        WxProperties.Pay pay = wxProperties.getPay();
+        if (isBlank(pay.getMchId())) throw new ServiceException("微信支付初始化失败：WX_PAY_MCH_ID 未配置");
+        if (isBlank(pay.getApiV3Key())) throw new ServiceException("微信支付初始化失败：WX_PAY_APIV3 未配置");
+        if (pay.getApiV3Key().length() != 32) throw new ServiceException("微信支付初始化失败：WX_PAY_APIV3 必须为32位");
+        if (isBlank(pay.getNotifyUrl()) || !pay.getNotifyUrl().startsWith("https://")) {
+            throw new ServiceException("微信支付初始化失败：WX_PAY_NOTIFY 必须是 HTTPS 地址");
+        }
+        if (isBlank(pay.getPrivateKeyPath())) throw new ServiceException("微信支付初始化失败：WX_PAY_PRIVATE_KEY 未配置");
+        File privateKey = new File(pay.getPrivateKeyPath());
+        if (!privateKey.isFile() || !privateKey.canRead()) {
+            throw new ServiceException("微信支付初始化失败：商户私钥文件不存在或不可读");
+        }
+        if (isBlank(pay.getCertSerial())) throw new ServiceException("微信支付初始化失败：WX_PAY_CERT_SERIAL 未配置");
+    }
+
+    private boolean isBlank(String value)
+    {
+        return value == null || value.trim().isEmpty();
     }
 
     @Override
