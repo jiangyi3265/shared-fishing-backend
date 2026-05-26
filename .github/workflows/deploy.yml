@@ -75,6 +75,13 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
           BACKEND_SERVICE: ${{ secrets.BACKEND_SERVICE }}
+          WX_APPID: ${{ secrets.WX_APPID }}
+          WX_SECRET: ${{ secrets.WX_SECRET }}
+          WX_PAY_MCH_ID: ${{ secrets.WX_PAY_MCH_ID }}
+          WX_PAY_APIV3: ${{ secrets.WX_PAY_APIV3 }}
+          WX_PAY_NOTIFY: ${{ secrets.WX_PAY_NOTIFY }}
+          WX_PAY_CERT_SERIAL: ${{ secrets.WX_PAY_CERT_SERIAL }}
+          WX_PAY_PRIVATE_KEY_B64: ${{ secrets.WX_PAY_PRIVATE_KEY_B64 }}
         run: |
           : "${SSH_HOST:?Missing SSH_HOST secret}"
           : "${SSH_USER:?Missing SSH_USER secret}"
@@ -83,7 +90,7 @@ jobs:
           SERVICE_NAME="${BACKEND_SERVICE:-fishing-backend}"
           SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
-          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' SOURCE_ROOT='${SOURCE_ROOT}' JAR_NAME='${JAR_NAME}' SOURCE_ARCHIVE='${SOURCE_ARCHIVE}' COMMIT_SHA='${GITHUB_SHA}' SERVICE_NAME='${SERVICE_NAME}' bash -s" <<'EOF'
+          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' SOURCE_ROOT='${SOURCE_ROOT}' JAR_NAME='${JAR_NAME}' SOURCE_ARCHIVE='${SOURCE_ARCHIVE}' COMMIT_SHA='${GITHUB_SHA}' SERVICE_NAME='${SERVICE_NAME}' WX_APPID='${WX_APPID:-}' WX_SECRET='${WX_SECRET:-}' WX_PAY_MCH_ID='${WX_PAY_MCH_ID:-}' WX_PAY_APIV3='${WX_PAY_APIV3:-}' WX_PAY_NOTIFY='${WX_PAY_NOTIFY:-}' WX_PAY_CERT_SERIAL='${WX_PAY_CERT_SERIAL:-}' WX_PAY_PRIVATE_KEY_B64='${WX_PAY_PRIVATE_KEY_B64:-}' bash -s" <<'EOF'
           set -euo pipefail
           RELEASE_DIR="${SOURCE_ROOT}/${COMMIT_SHA}"
           case "${RELEASE_DIR}" in
@@ -108,6 +115,43 @@ jobs:
               exit 1
             fi
           fi
+
+          ENV_FILE="${DEPLOY_DIR}/.env.production"
+          CERT_DIR="/opt/fishing/certs"
+          PRIVATE_KEY_PATH="${CERT_DIR}/apiclient_key.pem"
+          touch "${ENV_FILE}"
+          chmod 600 "${ENV_FILE}" || true
+
+          upsert_env() {
+            key="$1"
+            value="$2"
+            [ -n "${value}" ] || return 0
+            if grep -q "^${key}=" "${ENV_FILE}"; then
+              tmp_file="$(mktemp)"
+              awk -v k="${key}" -v v="${value}" 'BEGIN{done=0} $0 ~ "^" k "=" {print k "=" v; done=1; next} {print} END{if(!done) print k "=" v}' "${ENV_FILE}" > "${tmp_file}"
+              cat "${tmp_file}" > "${ENV_FILE}"
+              rm -f "${tmp_file}"
+            else
+              printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
+            fi
+          }
+
+          mkdir -p "${CERT_DIR}"
+          if [ -n "${WX_PAY_PRIVATE_KEY_B64:-}" ]; then
+            printf '%s' "${WX_PAY_PRIVATE_KEY_B64}" | base64 -d > "${PRIVATE_KEY_PATH}"
+            chmod 600 "${PRIVATE_KEY_PATH}"
+          fi
+
+          upsert_env "WX_PAY_ENABLED" "true"
+          upsert_env "WX_PAY_MOCK_ENABLED" "false"
+          upsert_env "WX_PAY_MCH_ID" "${WX_PAY_MCH_ID:-}"
+          upsert_env "WX_PAY_APIV3" "${WX_PAY_APIV3:-}"
+          upsert_env "WX_PAY_NOTIFY" "${WX_PAY_NOTIFY:-}"
+          upsert_env "WX_PAY_PRIVATE_KEY" "${PRIVATE_KEY_PATH}"
+          upsert_env "WX_PAY_CERT_SERIAL" "${WX_PAY_CERT_SERIAL:-}"
+          upsert_env "WX_MOCK_ENABLED" "false"
+          upsert_env "WX_APPID" "${WX_APPID:-}"
+          upsert_env "WX_SECRET" "${WX_SECRET:-}"
 
           cd "${RELEASE_DIR}"
           mvn -B -DskipTests clean package
