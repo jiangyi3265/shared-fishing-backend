@@ -78,7 +78,7 @@ public class WxPayServiceImpl implements IWxPayService
             throw new ServiceException("微信支付 SDK 未安装");
         } catch (Throwable t) {
             log.error("微信支付初始化失败", t);
-            throw new ServiceException("微信支付初始化失败");
+            throw new ServiceException("微信支付初始化失败：" + rootMessage(t));
         }
     }
 
@@ -102,6 +102,15 @@ public class WxPayServiceImpl implements IWxPayService
     private boolean isBlank(String value)
     {
         return value == null || value.trim().isEmpty();
+    }
+
+    private String rootMessage(Throwable t)
+    {
+        Throwable cur = t;
+        while (cur.getCause() != null) cur = cur.getCause();
+        String msg = cur.getMessage();
+        if (isBlank(msg)) msg = cur.getClass().getSimpleName();
+        return msg;
     }
 
     @Override
