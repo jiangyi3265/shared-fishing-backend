@@ -75,6 +75,7 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
           BACKEND_SERVICE: ${{ secrets.BACKEND_SERVICE }}
+          DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           TOKEN_SECRET: ${{ secrets.TOKEN_SECRET }}
@@ -95,7 +96,7 @@ jobs:
           SERVICE_NAME="${BACKEND_SERVICE:-fishing-backend}"
           SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
-          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' SOURCE_ROOT='${SOURCE_ROOT}' JAR_NAME='${JAR_NAME}' SOURCE_ARCHIVE='${SOURCE_ARCHIVE}' COMMIT_SHA='${GITHUB_SHA}' SERVICE_NAME='${SERVICE_NAME}' DB_USER='${DB_USER:-}' DB_PASSWORD='${DB_PASSWORD:-}' TOKEN_SECRET='${TOKEN_SECRET:-}' WX_APPID='${WX_APPID:-}' WX_SECRET='${WX_SECRET:-}' WX_PAY_MCH_ID='${WX_PAY_MCH_ID:-}' WX_PAY_APIV3='${WX_PAY_APIV3:-}' WX_PAY_NOTIFY='${WX_PAY_NOTIFY:-}' WX_PAY_CERT_SERIAL='${WX_PAY_CERT_SERIAL:-}' WX_PAY_PRIVATE_KEY_B64='${WX_PAY_PRIVATE_KEY_B64:-}' WX_PAY_PUBLIC_KEY_ID='${WX_PAY_PUBLIC_KEY_ID:-}' WX_PAY_PUBLIC_KEY_B64='${WX_PAY_PUBLIC_KEY_B64:-}' bash -s" <<'EOF'
+          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' SOURCE_ROOT='${SOURCE_ROOT}' JAR_NAME='${JAR_NAME}' SOURCE_ARCHIVE='${SOURCE_ARCHIVE}' COMMIT_SHA='${GITHUB_SHA}' SERVICE_NAME='${SERVICE_NAME}' DB_NAME='${DB_NAME:-}' DB_USER='${DB_USER:-}' DB_PASSWORD='${DB_PASSWORD:-}' TOKEN_SECRET='${TOKEN_SECRET:-}' WX_APPID='${WX_APPID:-}' WX_SECRET='${WX_SECRET:-}' WX_PAY_MCH_ID='${WX_PAY_MCH_ID:-}' WX_PAY_APIV3='${WX_PAY_APIV3:-}' WX_PAY_NOTIFY='${WX_PAY_NOTIFY:-}' WX_PAY_CERT_SERIAL='${WX_PAY_CERT_SERIAL:-}' WX_PAY_PRIVATE_KEY_B64='${WX_PAY_PRIVATE_KEY_B64:-}' WX_PAY_PUBLIC_KEY_ID='${WX_PAY_PUBLIC_KEY_ID:-}' WX_PAY_PUBLIC_KEY_B64='${WX_PAY_PUBLIC_KEY_B64:-}' bash -s" <<'EOF'
           set -euo pipefail
           RELEASE_DIR="${SOURCE_ROOT}/${COMMIT_SHA}"
           case "${RELEASE_DIR}" in
@@ -166,9 +167,14 @@ jobs:
           fi
           upsert_env "APP_ENV" "production"
           upsert_env "SERVER_PORT" "8080"
+          upsert_env "DB_HOST" "localhost"
+          upsert_env "DB_NAME" "${DB_NAME:-ha}"
           upsert_env "DB_USER" "${DB_USER:-}"
           upsert_env "DB_PASSWORD" "${DB_PASSWORD:-}"
           upsert_env "TOKEN_SECRET" "${TOKEN_SECRET:-}"
+          upsert_env "CORS_ALLOWED_ORIGINS" "https://ht.diaoyuus.cn,https://www.diaoyuus.cn"
+          upsert_env "SWAGGER_ENABLED" "false"
+          upsert_env "DEMO_ENABLED" "false"
           upsert_env "WX_MOCK_ENABLED" "false"
           upsert_env "WX_APPID" "${WX_APPID:-}"
           upsert_env "WX_SECRET" "${WX_SECRET:-}"
