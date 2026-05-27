@@ -209,6 +209,20 @@ jobs:
             tail -n 200 "${DEPLOY_DIR}/logs/${JAR_NAME}.log" || true
             exit 1
           fi
+          MYSQL_BIN="$(command -v mysql || true)"
+          if [ -z "${MYSQL_BIN}" ] && [ -x /www/server/mysql/bin/mysql ]; then
+            MYSQL_BIN=/www/server/mysql/bin/mysql
+          fi
+          if [ -n "${MYSQL_BIN}" ] && [ -n "${DB_USER:-}" ] && [ -n "${DB_PASSWORD:-}" ]; then
+            MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_BIN}" --default-character-set=utf8mb4 -h 127.0.0.1 -P 3306 -u "${DB_USER}" "${DB_NAME:-ha}" -e "
+              INSERT INTO fish_qrcode (venue_id, qr_type, scene_value, remark, status, create_by, create_time)
+              SELECT 1, 'start', 'action=start&venueId=1', '默认入场码', '0', 'admin', NOW()
+              WHERE NOT EXISTS (SELECT 1 FROM fish_qrcode WHERE venue_id = 1 AND qr_type = 'start');
+              INSERT INTO fish_qrcode (venue_id, qr_type, scene_value, remark, status, create_by, create_time)
+              SELECT 1, 'end', 'action=end&venueId=1', '默认离场码', '0', 'admin', NOW()
+              WHERE NOT EXISTS (SELECT 1 FROM fish_qrcode WHERE venue_id = 1 AND qr_type = 'end');
+            "
+          fi
           echo "Backend health check passed:"
           head -c 500 /tmp/fishing-health.json
           echo

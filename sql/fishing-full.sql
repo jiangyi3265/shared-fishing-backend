@@ -445,6 +445,10 @@ CREATE TABLE `fish_qrcode` (
   KEY `idx_venue` (`venue_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 COMMENT='钓场二维码';
 
+INSERT INTO `fish_qrcode` (`venue_id`, `qr_type`, `scene_value`, `remark`, `status`, `create_by`, `create_time`) VALUES
+(1, 'start', 'action=start&venueId=1', '默认入场码', '0', 'admin', sysdate()),
+(1, 'end', 'action=end&venueId=1', '默认离场码', '0', 'admin', sysdate());
+
 -- 订单
 DROP TABLE IF EXISTS `fish_order`;
 CREATE TABLE `fish_order` (
