@@ -63,6 +63,9 @@ public class FishRefundServiceImpl implements IFishRefundService
         FishRefund active = refundMapper.selectActiveRefundByOrderId(orderId, TYPE_FISHING);
         if (active != null) throw new ServiceException("已有进行中的退款申请，请勿重复提交");
 
+        refundable = Math.max(0, refundable - refundedAmount(orderId, TYPE_FISHING));
+        if (refundable <= 0) throw new ServiceException("订单已无可退金额");
+
         int amount = applyAmountCents == null ? refundable : applyAmountCents;
         if (amount <= 0 || amount > refundable) throw new ServiceException("退款金额非法");
 
@@ -87,8 +90,8 @@ public class FishRefundServiceImpl implements IFishRefundService
         FishMallOrder order = mallOrderMapper.selectById(mallOrderId);
         if (order == null) throw new ServiceException("订单不存在");
         if (!userId.equals(order.getUserId())) throw new ServiceException("订单不属于当前用户");
-        // 已核销后不再允许退款；待核销(1) 可申请
-        if (order.getStatus() == null || order.getStatus() != 1) throw new ServiceException("仅待核销订单可申请退款");
+        // 已领取后不再允许退款；可领取(1) 可申请
+        if (order.getStatus() == null || order.getStatus() != 1) throw new ServiceException("仅已支付未领取订单可申请退款");
 
         int paid = order.getAmountPaid() == null ? 0 : order.getAmountPaid();
         int balance = order.getBalanceCents() == null ? 0 : order.getBalanceCents();
@@ -99,6 +102,9 @@ public class FishRefundServiceImpl implements IFishRefundService
 
         FishRefund active = refundMapper.selectActiveRefundByOrderId(mallOrderId, TYPE_MALL);
         if (active != null) throw new ServiceException("已有进行中的退款申请，请勿重复提交");
+
+        refundable = Math.max(0, refundable - refundedAmount(mallOrderId, TYPE_MALL));
+        if (refundable <= 0) throw new ServiceException("订单已无可退金额");
 
         int amount = applyAmountCents == null ? refundable : applyAmountCents;
         if (amount <= 0 || amount > refundable) throw new ServiceException("退款金额非法");
@@ -191,7 +197,7 @@ public class FishRefundServiceImpl implements IFishRefundService
                 String wxRefundNo = wxPayService.refund(r.getOrderNo(), r.getRefundNo(), wxPart, totalPaid, remark);
                 r.setWxRefundNo(wxRefundNo == null ? "" : wxRefundNo);
                 refundMapper.updateFishRefund(r);
-                // 商城订单立即置已退款/已关闭（库存不回滚：已经预扣，核销前已支付）
+                // 商城订单立即置已退款/已关闭（库存不回滚：已经预扣，领取前已支付）
                 if (isMall) markMallRefundProcessing(r.getOrderId());
                 return r; // 等待 wx 异步回调推进 2 / 4
             }
@@ -220,7 +226,7 @@ public class FishRefundServiceImpl implements IFishRefundService
         return r;
     }
 
-    /** 商城订单退款进入流程后，把订单从 1 待核销 标记为 3 已取消（避免继续核销） */
+    /** 商城订单退款进入流程后，把订单从 1 可领取 标记为 3 已取消（避免继续确认领取） */
     private void markMallRefundProcessing(Long mallOrderId)
     {
         FishMallOrder m = mallOrderMapper.selectById(mallOrderId);
@@ -234,6 +240,12 @@ public class FishRefundServiceImpl implements IFishRefundService
         for (FishMallOrderItem it : items) mallGoodsMapper.increaseStock(it.getGoodsId(), it.getQty());
         m.setStatus(3);
         mallOrderMapper.update(m);
+    }
+
+    private int refundedAmount(Long orderId, String orderType)
+    {
+        Integer amount = refundMapper.sumRefundAmountByOrder(orderId, orderType);
+        return amount == null ? 0 : amount;
     }
 
     @Override
@@ -266,7 +278,7 @@ public class FishRefundServiceImpl implements IFishRefundService
         if (success) r.setFinishTime(new Date());
         refundMapper.updateFishRefund(r);
 
-        // 商城订单：退款失败则回滚到 1 待核销（让用户能继续核销/重新申请）；成功无操作（已是 3 取消）
+        // 商城订单：退款失败则回滚到 1 可领取（让用户能继续领取/重新申请）；成功无操作（已是 3 取消）
         if (TYPE_MALL.equals(r.getOrderType()) && !success)
         {
             FishMallOrder m = mallOrderMapper.selectById(r.getOrderId());
@@ -306,7 +318,32 @@ public class FishRefundServiceImpl implements IFishRefundService
                 }
             }
         }
+        if (TYPE_FISHING.equals(r.getOrderType()) && !success)
+        {
+            rollbackFishingRefundedBalance(r);
+        }
         return r;
+    }
+
+    private void rollbackFishingRefundedBalance(FishRefund r)
+    {
+        if (r.getRefundAmountCents() == null) return;
+        FishOrder order = orderMapper.selectFishOrderByOrderId(r.getOrderId());
+        int balanceUsed = order == null || order.getBalanceCents() == null ? 0 : order.getBalanceCents();
+        int wxPart = Math.min(r.getRefundAmountCents(),
+                order == null || order.getAmountPaid() == null ? 0 : order.getAmountPaid());
+        int balancePart = Math.max(0, r.getRefundAmountCents() - wxPart);
+        if (balancePart > balanceUsed) balancePart = balanceUsed;
+        if (balancePart <= 0) return;
+        try
+        {
+            balanceService.applyDelta(r.getUserId(), -balancePart, FishBalanceLog.TYPE_REFUND,
+                    r.getOrderNo(), "退款失败回扣 · " + r.getRefundNo(), "system");
+        }
+        catch (Exception e)
+        {
+            log.error("退款失败回扣余额失败 refundNo={} err={}", r.getRefundNo(), e.getMessage());
+        }
     }
 
     @Override

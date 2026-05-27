@@ -11,6 +11,8 @@ public interface FishRefundMapper
     /** 一个订单的活动中退款（status in 0,1） */
     FishRefund selectActiveRefundByOrderId(@Param("orderId") Long orderId,
                                            @Param("orderType") String orderType);
+    Integer sumRefundAmountByOrder(@Param("orderId") Long orderId,
+                                   @Param("orderType") String orderType);
     List<FishRefund> selectFishRefundList(FishRefund refund);
     List<FishRefund> selectByUserId(@Param("userId") Long userId);
     int insertFishRefund(FishRefund refund);

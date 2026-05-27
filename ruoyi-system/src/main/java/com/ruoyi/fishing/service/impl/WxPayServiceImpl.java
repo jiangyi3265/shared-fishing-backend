@@ -12,12 +12,11 @@ import com.ruoyi.fishing.config.WxProperties;
 import com.ruoyi.fishing.service.IWxPayService;
 
 /**
- * 微信支付 V3 JSAPI 服务
+ * WeChat Pay V3 JSAPI service.
  *
- * 通过反射调用 wechatpay-java SDK。开发环境可以关闭真实支付走 mock；
- * 生产环境只要 WX_PAY_ENABLED=true，SDK 或商户配置异常都会直接失败。
- *
- * 参考 SDK：https://github.com/wechatpay-apiv3/wechatpay-java
+ * Supports both legacy auto platform-certificate mode and the newer WeChat Pay
+ * public-key mode. Configure WX_PAY_PUBLIC_KEY + WX_PAY_PUBLIC_KEY_ID to use
+ * public-key mode and avoid /v3/certificates initialization failures.
  */
 @Service
 public class WxPayServiceImpl implements IWxPayService
@@ -30,7 +29,6 @@ public class WxPayServiceImpl implements IWxPayService
     private Object jsapiService;
     private Object refundService;
     private Object notificationParser;
-    private Object refundConfig;
     private boolean initialized = false;
 
     @Override
@@ -46,13 +44,40 @@ public class WxPayServiceImpl implements IWxPayService
         validatePayConfig();
         try {
             WxProperties.Pay pay = wxProperties.getPay();
-            Class<?> cfgBuilder = Class.forName("com.wechat.pay.java.core.RSAAutoCertificateConfig$Builder");
-            Object builder = cfgBuilder.getDeclaredConstructor().newInstance();
-            cfgBuilder.getMethod("merchantId", String.class).invoke(builder, pay.getMchId());
-            cfgBuilder.getMethod("privateKeyFromPath", String.class).invoke(builder, pay.getPrivateKeyPath());
-            cfgBuilder.getMethod("merchantSerialNumber", String.class).invoke(builder, pay.getCertSerial());
-            cfgBuilder.getMethod("apiV3Key", String.class).invoke(builder, pay.getApiV3Key());
-            Object config = cfgBuilder.getMethod("build").invoke(builder);
+            Object config;
+            Object notificationConfig;
+            if (usePublicKeyMode(pay))
+            {
+                Class<?> cfgBuilder = Class.forName("com.wechat.pay.java.core.RSAPublicKeyConfig$Builder");
+                Object builder = cfgBuilder.getDeclaredConstructor().newInstance();
+                cfgBuilder.getMethod("merchantId", String.class).invoke(builder, pay.getMchId());
+                cfgBuilder.getMethod("privateKeyFromPath", String.class).invoke(builder, pay.getPrivateKeyPath());
+                cfgBuilder.getMethod("merchantSerialNumber", String.class).invoke(builder, pay.getCertSerial());
+                cfgBuilder.getMethod("apiV3Key", String.class).invoke(builder, pay.getApiV3Key());
+                cfgBuilder.getMethod("publicKeyFromPath", String.class).invoke(builder, pay.getPublicKeyPath());
+                cfgBuilder.getMethod("publicKeyId", String.class).invoke(builder, pay.getPublicKeyId());
+                config = cfgBuilder.getMethod("build").invoke(builder);
+
+                Class<?> ncBuilder = Class.forName("com.wechat.pay.java.core.notification.RSAPublicKeyNotificationConfig$Builder");
+                Object nb = ncBuilder.getDeclaredConstructor().newInstance();
+                ncBuilder.getMethod("apiV3Key", String.class).invoke(nb, pay.getApiV3Key());
+                ncBuilder.getMethod("publicKeyFromPath", String.class).invoke(nb, pay.getPublicKeyPath());
+                ncBuilder.getMethod("publicKeyId", String.class).invoke(nb, pay.getPublicKeyId());
+                notificationConfig = ncBuilder.getMethod("build").invoke(nb);
+                log.info("WxPay SDK initialized with WeChat Pay public key mode");
+            }
+            else
+            {
+                Class<?> cfgBuilder = Class.forName("com.wechat.pay.java.core.RSAAutoCertificateConfig$Builder");
+                Object builder = cfgBuilder.getDeclaredConstructor().newInstance();
+                cfgBuilder.getMethod("merchantId", String.class).invoke(builder, pay.getMchId());
+                cfgBuilder.getMethod("privateKeyFromPath", String.class).invoke(builder, pay.getPrivateKeyPath());
+                cfgBuilder.getMethod("merchantSerialNumber", String.class).invoke(builder, pay.getCertSerial());
+                cfgBuilder.getMethod("apiV3Key", String.class).invoke(builder, pay.getApiV3Key());
+                config = cfgBuilder.getMethod("build").invoke(builder);
+                notificationConfig = config;
+                log.info("WxPay SDK initialized with auto certificate mode");
+            }
 
             Class<?> svcBuilder = Class.forName("com.wechat.pay.java.service.payments.jsapi.JsapiServiceExtension$Builder");
             Object sb = svcBuilder.getDeclaredConstructor().newInstance();
@@ -61,8 +86,7 @@ public class WxPayServiceImpl implements IWxPayService
 
             Class<?> parser = Class.forName("com.wechat.pay.java.core.notification.NotificationParser");
             notificationParser = parser.getConstructor(Class.forName("com.wechat.pay.java.core.notification.NotificationConfig"))
-                    .newInstance(config);
-            refundConfig = config;
+                    .newInstance(notificationConfig);
 
             Class<?> refundBuilder = Class.forName("com.wechat.pay.java.service.refund.RefundService$Builder");
             Object rb = refundBuilder.getDeclaredConstructor().newInstance();
@@ -70,14 +94,14 @@ public class WxPayServiceImpl implements IWxPayService
             refundService = refundBuilder.getMethod("build").invoke(rb);
 
             initialized = true;
-            log.info("WxPay SDK 初始化成功");
+            log.info("WxPay SDK initialized successfully");
         } catch (ServiceException e) {
             throw e;
         } catch (ClassNotFoundException e) {
-            log.error("wechatpay-java SDK 未在 classpath 中", e);
+            log.error("wechatpay-java SDK is not in classpath", e);
             throw new ServiceException("微信支付 SDK 未安装");
         } catch (Throwable t) {
-            log.error("微信支付初始化失败", t);
+            log.error("WxPay initialization failed", t);
             throw new ServiceException("微信支付初始化失败：" + rootMessage(t));
         }
     }
@@ -87,7 +111,7 @@ public class WxPayServiceImpl implements IWxPayService
         WxProperties.Pay pay = wxProperties.getPay();
         if (isBlank(pay.getMchId())) throw new ServiceException("微信支付初始化失败：WX_PAY_MCH_ID 未配置");
         if (isBlank(pay.getApiV3Key())) throw new ServiceException("微信支付初始化失败：WX_PAY_APIV3 未配置");
-        if (pay.getApiV3Key().length() != 32) throw new ServiceException("微信支付初始化失败：WX_PAY_APIV3 必须为32位");
+        if (pay.getApiV3Key().length() != 32) throw new ServiceException("微信支付初始化失败：WX_PAY_APIV3 必须为 32 位");
         if (isBlank(pay.getNotifyUrl()) || !pay.getNotifyUrl().startsWith("https://")) {
             throw new ServiceException("微信支付初始化失败：WX_PAY_NOTIFY 必须是 HTTPS 地址");
         }
@@ -97,6 +121,20 @@ public class WxPayServiceImpl implements IWxPayService
             throw new ServiceException("微信支付初始化失败：商户私钥文件不存在或不可读");
         }
         if (isBlank(pay.getCertSerial())) throw new ServiceException("微信支付初始化失败：WX_PAY_CERT_SERIAL 未配置");
+        if (usePublicKeyMode(pay))
+        {
+            if (isBlank(pay.getPublicKeyPath())) throw new ServiceException("微信支付初始化失败：WX_PAY_PUBLIC_KEY 未配置");
+            if (isBlank(pay.getPublicKeyId())) throw new ServiceException("微信支付初始化失败：WX_PAY_PUBLIC_KEY_ID 未配置");
+            File publicKey = new File(pay.getPublicKeyPath());
+            if (!publicKey.isFile() || !publicKey.canRead()) {
+                throw new ServiceException("微信支付初始化失败：WX_PAY_PUBLIC_KEY 文件不存在或不可读");
+            }
+        }
+    }
+
+    private boolean usePublicKeyMode(WxProperties.Pay pay)
+    {
+        return !isBlank(pay.getPublicKeyPath()) || !isBlank(pay.getPublicKeyId());
     }
 
     private boolean isBlank(String value)
@@ -132,7 +170,7 @@ public class WxPayServiceImpl implements IWxPayService
             if (isBlank(mp.getAppid())) throw new ServiceException("微信支付下单失败：WX_APPID 未配置");
             if (isBlank(openid)) throw new ServiceException("微信支付下单失败：当前用户缺少 openid，请重新登录");
             if (isBlank(orderNo)) throw new ServiceException("微信支付下单失败：订单号为空");
-            if (amountCents <= 0) throw new ServiceException("微信支付下单失败：支付金额必须大于0");
+            if (amountCents <= 0) throw new ServiceException("微信支付下单失败：支付金额必须大于 0");
 
             Class<?> reqCls = Class.forName("com.wechat.pay.java.service.payments.jsapi.model.PrepayRequest");
             Class<?> amtCls = Class.forName("com.wechat.pay.java.service.payments.jsapi.model.Amount");
@@ -168,13 +206,13 @@ public class WxPayServiceImpl implements IWxPayService
         } catch (ServiceException e) {
             throw e;
         } catch (Throwable t) {
-            log.error("微信支付下单失败", t);
+            log.error("WxPay prepay failed", t);
             throw new ServiceException("微信支付下单失败：" + rootMessage(t));
         }
     }
 
     @Override
-    public String handleNotify(String body, Map<String, String> headers)
+    public PayCallback handleNotify(String body, Map<String, String> headers)
     {
         ensureInit();
         if (!initialized) return null;
@@ -192,9 +230,15 @@ public class WxPayServiceImpl implements IWxPayService
             Object tx = notificationParser.getClass()
                     .getMethod("parse", Class.forName("com.wechat.pay.java.core.notification.RequestParam"), Class.class)
                     .invoke(notificationParser, param, txCls);
-            return (String) txCls.getMethod("getOutTradeNo").invoke(tx);
+            Object tradeState = invokeIfExists(tx, "getTradeState");
+            if (tradeState != null && !"SUCCESS".equals(tradeState.toString())) return null;
+            PayCallback cb = new PayCallback();
+            cb.orderNo = (String) txCls.getMethod("getOutTradeNo").invoke(tx);
+            Object transactionId = invokeIfExists(tx, "getTransactionId");
+            cb.transactionId = transactionId == null ? "" : transactionId.toString();
+            return cb;
         } catch (Throwable t) {
-            log.error("解析微信支付回调失败", t);
+            log.error("WxPay notify parse failed", t);
             return null;
         }
     }
@@ -233,8 +277,8 @@ public class WxPayServiceImpl implements IWxPayService
         } catch (ServiceException e) {
             throw e;
         } catch (Throwable t) {
-            log.error("微信退款下单失败", t);
-            throw new ServiceException("微信退款下单失败: " + t.getMessage());
+            log.error("WxPay refund failed", t);
+            throw new ServiceException("微信退款下单失败：" + rootMessage(t));
         }
     }
 
@@ -264,7 +308,7 @@ public class WxPayServiceImpl implements IWxPayService
             cb.success = status != null && "SUCCESS".equals(status.toString());
             return cb;
         } catch (Throwable t) {
-            log.error("解析微信退款回调失败", t);
+            log.error("WxPay refund notify parse failed", t);
             return null;
         }
     }
@@ -272,6 +316,15 @@ public class WxPayServiceImpl implements IWxPayService
     private Object invoke(Object target, String method) throws Exception
     {
         return target.getClass().getMethod(method).invoke(target);
+    }
+
+    private Object invokeIfExists(Object target, String method)
+    {
+        try {
+            return target.getClass().getMethod(method).invoke(target);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String header(Map<String, String> headers, String name)

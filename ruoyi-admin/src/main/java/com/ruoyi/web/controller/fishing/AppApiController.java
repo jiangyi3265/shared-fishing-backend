@@ -294,12 +294,14 @@ public class AppApiController
         while (names.hasMoreElements()) { String n = names.nextElement(); headers.put(n, request.getHeader(n)); }
         Map<String, Object> res = new HashMap<>();
         try {
-            String orderNo = wxPayService.handleNotify(body, headers);
-            String tradeNo = headers.getOrDefault("wechatpay-serial", "");
+            IWxPayService.PayCallback cb = wxPayService.handleNotify(body, headers);
+            String orderNo = cb == null ? null : cb.orderNo;
+            String tradeNo = cb == null ? "" : cb.transactionId;
             if (orderNo != null)
             {
                 if (orderNo.startsWith("R")) balanceService.markRechargePaid(orderNo, tradeNo);
                 else if (orderNo.startsWith("M")) mallService.markPaid(orderNo, tradeNo);
+                else if (orderNo.startsWith("A")) regService.pay(parseLong(orderNo.substring(1)));
                 else orderService.markPaid(orderNo, tradeNo);
             }
             res.put("code", "SUCCESS"); res.put("message", "成功");
@@ -382,11 +384,38 @@ public class AppApiController
         FishRegistration reg = regService.selectFishRegistrationByRegId(regId);
         if (reg == null) return AjaxResult.error("报名不存在");
         if (!userId.equals(reg.getUserId())) return unauthorized();
-        if (reg.getFeeCents() != null && reg.getFeeCents() > 0 && !wxPayService.isMockEnabled())
+        int fee = reg.getFeeCents() == null ? 0 : reg.getFeeCents();
+        if (reg.getPaid() != null && reg.getPaid() == 1)
         {
-            return AjaxResult.error("活动报名支付未配置");
+            Map<String, Object> data = new HashMap<>();
+            data.put("order", reg);
+            data.put("needWxPay", false);
+            return AjaxResult.success(data);
         }
-        return AjaxResult.success(regService.pay(regId));
+        if (fee <= 0)
+        {
+            Map<String, Object> data = new HashMap<>();
+            data.put("order", regService.pay(regId));
+            data.put("needWxPay", false);
+            return AjaxResult.success(data);
+        }
+        if (wxPayService.isEnabled())
+        {
+            FishUser user = userService.selectFishUserByUserId(userId);
+            if (user == null) return AjaxResult.error("用户不存在");
+            Map<String, Object> prepay = wxPayService.createPrepay("A" + regId, fee, user.getOpenid(),
+                    "活动报名 · " + regId);
+            Map<String, Object> data = new HashMap<>();
+            data.put("order", reg);
+            data.put("pay", prepay);
+            data.put("needWxPay", true);
+            return AjaxResult.success(data);
+        }
+        if (!wxPayService.isMockEnabled()) return AjaxResult.error("微信支付未配置");
+        Map<String, Object> data = new HashMap<>();
+        data.put("order", regService.pay(regId));
+        data.put("needWxPay", false);
+        return AjaxResult.success(data);
     }
 
     /** 我的报名 */
@@ -642,7 +671,7 @@ public class AppApiController
 
     // ===================== 店员工作台 =====================
 
-    /** 当前用户是否为店员 + 最近 N 单已核销简报 */
+    /** 当前用户是否为店员 + 最近 N 单已领取简报 */
     @Anonymous
     @GetMapping("/staff/info")
     public AjaxResult staffInfo()
@@ -661,7 +690,7 @@ public class AppApiController
             q.setStatus(2);
             // 借列表分页参数：当前实现 selectList 不分页，前端自行截取。简单做：直接调，前端取前 10
             data.put("recent", mallService.listOrder(q));
-            // 待核销数量
+            // 待领取数量
             FishMallOrder pendQ = new FishMallOrder();
             pendQ.setStatus(1);
             data.put("pendingCount", mallService.listOrder(pendQ).size());
@@ -669,7 +698,7 @@ public class AppApiController
         return AjaxResult.success(data);
     }
 
-    /** 店员核销 */
+    /** 店员确认领取 */
     @Anonymous
     @PostMapping("/staff/redeem")
     public AjaxResult staffRedeem(@RequestBody Map<String, String> body)
@@ -679,7 +708,7 @@ public class AppApiController
         FishUser user = userService.selectFishUserByUserId(userId);
         if (user == null || user.getIsStaff() == null || user.getIsStaff() != 1)
         {
-            return AjaxResult.error(403, "无核销权限");
+            return AjaxResult.error(403, "无确认领取权限");
         }
         String code = body == null ? "" : body.getOrDefault("code", "");
         FishMallOrder order = mallService.redeem(code, user.getNickname());

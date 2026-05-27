@@ -13,7 +13,7 @@ public interface IWxPayService
     Map<String, Object> createPrepay(String orderNo, int amountCents, String openid, String description);
 
     /** 处理微信支付回调，返回订单号 */
-    String handleNotify(String body, Map<String, String> headers);
+    PayCallback handleNotify(String body, Map<String, String> headers);
 
     /**
      * 发起微信退款。amountCents 是本次退款金额；totalCents 是订单原总额（必填）。
@@ -32,5 +32,11 @@ public interface IWxPayService
         public String refundNo;
         public boolean success;
         public String wxRefundNo;
+    }
+
+    class PayCallback
+    {
+        public String orderNo;
+        public String transactionId;
     }
 }

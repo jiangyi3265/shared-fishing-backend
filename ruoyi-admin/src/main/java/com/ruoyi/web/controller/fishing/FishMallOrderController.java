@@ -35,9 +35,9 @@ public class FishMallOrderController extends BaseController
     @GetMapping("/{mallOrderId}")
     public AjaxResult get(@PathVariable Long mallOrderId) { return success(mallService.getOrder(mallOrderId)); }
 
-    /** 核销：传 orderNoOrCode（订单号或核销码） */
+    /** 确认领取：传订单号（兼容历史凭证） */
     @PreAuthorize("@ss.hasPermi('fishing:mallOrder:redeem')")
-    @Log(title = "商城订单核销", businessType = BusinessType.UPDATE)
+    @Log(title = "商城订单确认领取", businessType = BusinessType.UPDATE)
     @PostMapping("/redeem")
     public AjaxResult redeem(@RequestBody Map<String, String> body)
     {

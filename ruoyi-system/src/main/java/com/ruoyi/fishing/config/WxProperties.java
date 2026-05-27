@@ -50,6 +50,8 @@ public class WxProperties
         private String notifyUrl;
         private String privateKeyPath;
         private String certSerial;
+        private String publicKeyPath;
+        private String publicKeyId;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -65,5 +67,9 @@ public class WxProperties
         public void setPrivateKeyPath(String privateKeyPath) { this.privateKeyPath = privateKeyPath; }
         public String getCertSerial() { return certSerial; }
         public void setCertSerial(String certSerial) { this.certSerial = certSerial; }
+        public String getPublicKeyPath() { return publicKeyPath; }
+        public void setPublicKeyPath(String publicKeyPath) { this.publicKeyPath = publicKeyPath; }
+        public String getPublicKeyId() { return publicKeyId; }
+        public void setPublicKeyId(String publicKeyId) { this.publicKeyId = publicKeyId; }
     }
 }

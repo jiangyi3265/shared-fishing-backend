@@ -9,7 +9,7 @@ import com.ruoyi.common.core.domain.BaseEntity;
 /**
  * 商城订单 fish_mall_order
  *
- * 状态：0 待支付 → 1 待核销 → 2 已核销 ；0 → 3 已取消
+ * 状态：0 待支付 → 1 可领取 → 2 已领取 ；0 → 3 已取消
  */
 public class FishMallOrder extends BaseEntity
 {
@@ -34,7 +34,7 @@ public class FishMallOrder extends BaseEntity
     /** 使用余额抵扣(分) */
     private Integer balanceCents;
 
-    @Excel(name = "状态", readConverterExp = "0=待支付,1=待核销,2=已核销,3=已取消")
+    @Excel(name = "状态", readConverterExp = "0=待支付,1=可领取,2=已领取,3=已取消")
     private Integer status;
 
     private String remark2;

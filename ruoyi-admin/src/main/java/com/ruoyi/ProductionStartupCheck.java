@@ -52,6 +52,8 @@ public final class ProductionStartupCheck
         String wxPayNotify = configValue(argMap, "wx.pay.notify-url", "WX_PAY_NOTIFY");
         String wxPayPrivateKey = configValue(argMap, "wx.pay.private-key-path", "WX_PAY_PRIVATE_KEY");
         String wxPayCertSerial = configValue(argMap, "wx.pay.cert-serial", "WX_PAY_CERT_SERIAL");
+        String wxPayPublicKey = configValue(argMap, "wx.pay.public-key-path", "WX_PAY_PUBLIC_KEY");
+        String wxPayPublicKeyId = configValue(argMap, "wx.pay.public-key-id", "WX_PAY_PUBLIC_KEY_ID");
         String corsOrigins = configValue(argMap, "cors.allowed-origin-patterns", "CORS_ALLOWED_ORIGINS");
 
         if (isBlank(dbPassword) || DEV_DB_PASSWORD.equals(dbPassword))
@@ -101,6 +103,15 @@ public final class ProductionStartupCheck
         if (isPlaceholder(wxPayCertSerial))
         {
             errors.add("WX_PAY_CERT_SERIAL 未配置");
+        }
+        boolean publicKeyMode = !isBlank(wxPayPublicKey) || !isBlank(wxPayPublicKeyId);
+        if (publicKeyMode && isPlaceholder(wxPayPublicKey))
+        {
+            errors.add("WX_PAY_PUBLIC_KEY 未配置");
+        }
+        if (publicKeyMode && isPlaceholder(wxPayPublicKeyId))
+        {
+            errors.add("WX_PAY_PUBLIC_KEY_ID 未配置");
         }
         if (isBlank(corsOrigins) || containsLocalhost(corsOrigins))
         {

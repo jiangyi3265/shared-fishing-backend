@@ -70,6 +70,14 @@
         order by r.refund_id desc limit 1
     </select>
 
+    <select id="sumRefundAmountByOrder" resultType="java.lang.Integer">
+        select coalesce(sum(r.refund_amount_cents), 0)
+        from fish_refund r
+        where r.order_id = #{orderId}
+          and r.status in (1, 2)
+          <if test="orderType != null and orderType != ''">AND r.order_type = #{orderType}</if>
+    </select>
+
     <select id="selectByUserId" resultMap="FishRefundResult">
         <include refid="selectFishRefundVo"/>
         where r.user_id = #{userId}

@@ -30,7 +30,7 @@ public interface IFishMallService
 
     // 订单
     /**
-     * 提交订单：扣库存、生成订单+明细、生成核销码。
+     * 提交订单：扣库存、生成订单+明细；已支付后凭订单号确认领取。
      * items: List<Map<goodsId, qty>>。
      * 默认状态 0 待支付（mock 模式可由 controller 调 markPaid 直接置 1）。
      */
@@ -42,10 +42,10 @@ public interface IFishMallService
      */
     FishMallOrder submitOrder(Long userId, List<Map<String, Object>> items, String remark, Long venueId, boolean useBalance);
 
-    /** 标记已支付：0 → 1 待核销 */
+    /** 标记已支付：0 → 1 可领取 */
     FishMallOrder markPaid(String orderNo, String tradeNo);
 
-    /** 后台核销：1 → 2 已核销，按 orderNo 或 redeemCode */
+    /** 后台确认领取：1 → 2 已领取，按 orderNo（兼容历史 redeemCode） */
     FishMallOrder redeem(String orderNoOrCode, String operator);
 
     /** 后台取消（仅待支付可取消，回滚库存） */

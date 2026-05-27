@@ -570,7 +570,7 @@ CREATE TABLE `fish_user_coupon` (
 -- ----------------------------
 INSERT INTO sys_menu VALUES (2000, '钓场管理', 0, 3, 'fishing', null, '', '', 1, 0, 'M', '0', '0', '', 'fish', 'admin', sysdate(), '', null, '钓场业务目录');
 
-INSERT INTO sys_menu VALUES (2010, '钓场信息', 2000, 1, 'venue', 'fishing/venue/index', '', '', 1, 0, 'C', '0', '0', 'fishing:venue:list', 'shopping', 'admin', sysdate(), '', null, '钓场信息菜单');
+INSERT INTO sys_menu VALUES (2010, '钓场信息', 2000, 1, 'venue', 'fishing/venue/index', '', '', 1, 0, 'C', '0', '0', 'fishing:venue:list', 'venue', 'admin', sysdate(), '', null, '钓场信息菜单');
 INSERT INTO sys_menu VALUES (2011, '钓场查询', 2010, 1, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:venue:query', '#', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_menu VALUES (2012, '钓场新增', 2010, 2, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:venue:add', '#', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_menu VALUES (2013, '钓场修改', 2010, 3, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:venue:edit', '#', 'admin', sysdate(), '', null, '');
@@ -598,7 +598,7 @@ INSERT INTO sys_menu VALUES (2050, '活动报名', 2000, 5, 'registration', 'fis
 INSERT INTO sys_menu VALUES (2051, '报名查询', 2050, 1, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:registration:query', '#', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_menu VALUES (2052, '报名导出', 2050, 2, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:registration:export', '#', 'admin', sysdate(), '', null, '');
 
-INSERT INTO sys_menu VALUES (2060, '优惠券模板', 2000, 6, 'coupon', 'fishing/coupon/index', '', '', 1, 0, 'C', '0', '0', 'fishing:coupon:list', 'tree-table', 'admin', sysdate(), '', null, '优惠券模板菜单');
+INSERT INTO sys_menu VALUES (2060, '优惠券模板', 2000, 6, 'coupon', 'fishing/coupon/index', '', '', 1, 0, 'C', '0', '0', 'fishing:coupon:list', 'coupon', 'admin', sysdate(), '', null, '优惠券模板菜单');
 INSERT INTO sys_menu VALUES (2061, '模板查询', 2060, 1, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:coupon:query', '#', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_menu VALUES (2062, '模板新增', 2060, 2, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:coupon:add', '#', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_menu VALUES (2063, '模板修改', 2060, 3, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:coupon:edit', '#', 'admin', sysdate(), '', null, '');
@@ -745,9 +745,9 @@ create table fish_mall_order (
   venue_id        bigint(20)   null comment '关联钓场',
   total_cents     int(11)      not null default 0 comment '合计金额(分)',
   amount_paid     int(11)      null     default 0 comment '实付金额(分)',
-  status          tinyint(2)   not null default 0 comment '0待支付 1待核销 2已核销 3已取消',
+  status          tinyint(2)   not null default 0 comment '0待支付 1可使用 2已领取 3已取消',
   remark          varchar(200) default '' comment '用户备注',
-  redeem_code     varchar(20)  default '' comment '核销码',
+  redeem_code     varchar(20)  default '' comment '历史字段，商品订单不再要求核销码',
   pay_trade_no    varchar(64)  default '' comment '微信支付单号',
   paid_time       datetime     null,
   redeemed_time   datetime     null,
@@ -800,11 +800,11 @@ insert into sys_menu (menu_name, parent_id, order_num, path, component, is_frame
 ('商品上下架', @mg, 5, '#', '', 1, 0, 'F', '0', '0', 'fishing:mallGoods:toggle', '#', 'admin', sysdate(), '', null, '');
 
 insert into sys_menu (menu_name, parent_id, order_num, path, component, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, update_by, update_time, remark)
-values ('商城订单', @parent, 23, 'mallOrder', 'fishing/mallOrder/index', 1, 0, 'C', '0', '0', 'fishing:mallOrder:list', 'documentation', 'admin', sysdate(), '', null, '商城订单 / 核销');
+values ('商城订单', @parent, 23, 'mallOrder', 'fishing/mallOrder/index', 1, 0, 'C', '0', '0', 'fishing:mallOrder:list', 'documentation', 'admin', sysdate(), '', null, '商城订单 / 领取确认');
 set @mo := last_insert_id();
 insert into sys_menu (menu_name, parent_id, order_num, path, component, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, update_by, update_time, remark) values
 ('订单查询', @mo, 1, '#', '', 1, 0, 'F', '0', '0', 'fishing:mallOrder:query',  '#', 'admin', sysdate(), '', null, ''),
-('订单核销', @mo, 2, '#', '', 1, 0, 'F', '0', '0', 'fishing:mallOrder:redeem', '#', 'admin', sysdate(), '', null, ''),
+('确认领取', @mo, 2, '#', '', 1, 0, 'F', '0', '0', 'fishing:mallOrder:redeem', '#', 'admin', sysdate(), '', null, ''),
 ('订单导出', @mo, 3, '#', '', 1, 0, 'F', '0', '0', 'fishing:mallOrder:export', '#', 'admin', sysdate(), '', null, '');
 
 -- 示例数据
@@ -1081,7 +1081,7 @@ create table fish_reservation (
 set @parent := (select menu_id from sys_menu where menu_name = '钓场管理' limit 1);
 
 insert into sys_menu (menu_name, parent_id, order_num, path, component, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, update_by, update_time, remark)
-values ('钓位管理', @parent, 34, 'spot', 'fishing/spot/index', 1, 0, 'C', '0', '0', 'fishing:spot:list', 'tree', 'admin', sysdate(), '', null, '钓位管理');
+values ('钓位管理', @parent, 34, 'spot', 'fishing/spot/index', 1, 0, 'C', '0', '0', 'fishing:spot:list', 'spot', 'admin', sysdate(), '', null, '钓位管理');
 set @sp := last_insert_id();
 insert into sys_menu (menu_name, parent_id, order_num, path, component, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, update_by, update_time, remark) values
 ('钓位查询', @sp, 1, '#', '', 1, 0, 'F', '0', '0', 'fishing:spot:query',  '#', 'admin', sysdate(), '', null, ''),
@@ -1413,7 +1413,7 @@ insert into fish_rental_goods (name, category, deposit_cents, rent_cents, rent_u
 set @parent := (select menu_id from sys_menu where menu_name = '钓场管理' limit 1);
 
 insert into sys_menu (menu_name, parent_id, order_num, path, component, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, update_by, update_time, remark)
-values ('租赁装备', @parent, 41, 'rentalGoods', 'fishing/rentalGoods/index', 1, 0, 'C', '0', '0', 'fishing:rental:list', 'component', 'admin', sysdate(), '', null, '装备租赁管理');
+values ('租赁装备', @parent, 41, 'rentalGoods', 'fishing/rentalGoods/index', 1, 0, 'C', '0', '0', 'fishing:rental:list', 'rental', 'admin', sysdate(), '', null, '装备租赁管理');
 set @rg := last_insert_id();
 insert into sys_menu (menu_name, parent_id, order_num, path, component, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, update_by, update_time, remark) values
 ('租赁查询', @rg, 1, '#', '', 1, 0, 'F', '0', '0', 'fishing:rental:query',  '#', 'admin', sysdate(), '', null, ''),
@@ -1422,7 +1422,7 @@ insert into sys_menu (menu_name, parent_id, order_num, path, component, is_frame
 ('租赁删除', @rg, 4, '#', '', 1, 0, 'F', '0', '0', 'fishing:rental:remove', '#', 'admin', sysdate(), '', null, '');
 
 insert into sys_menu (menu_name, parent_id, order_num, path, component, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, update_by, update_time, remark)
-values ('租赁订单', @parent, 42, 'rentalOrder', 'fishing/rentalOrder/index', 1, 0, 'C', '0', '0', 'fishing:rentalOrder:list', 'log', 'admin', sysdate(), '', null, '租赁订单管理');
+values ('租赁订单', @parent, 42, 'rentalOrder', 'fishing/rentalOrder/index', 1, 0, 'C', '0', '0', 'fishing:rentalOrder:list', 'rental', 'admin', sysdate(), '', null, '租赁订单管理');
 set @ro2 := last_insert_id();
 insert into sys_menu (menu_name, parent_id, order_num, path, component, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, update_by, update_time, remark) values
 ('租赁订单查询', @ro2, 1, '#', '', 1, 0, 'F', '0', '0', 'fishing:rentalOrder:query',   '#', 'admin', sysdate(), '', null, ''),

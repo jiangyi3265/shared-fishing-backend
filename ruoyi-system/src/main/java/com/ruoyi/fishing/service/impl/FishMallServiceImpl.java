@@ -112,10 +112,11 @@ public class FishMallServiceImpl implements IFishMallService
         order.setUserId(userId);
         order.setVenueId(venueId);
         order.setTotalCents(total);
+        order.setAmountPaid(0);
         order.setBalanceCents(balanceCents);
         order.setStatus(0);
         order.setRemark2(remark == null ? "" : remark);
-        order.setRedeemCode(genRedeemCode());
+        order.setRedeemCode("");
         orderMapper.insert(order);
 
         for (FishMallOrderItem it : snapshots)
@@ -169,13 +170,13 @@ public class FishMallServiceImpl implements IFishMallService
     @Transactional
     public FishMallOrder redeem(String orderNoOrCode, String operator)
     {
-        if (orderNoOrCode == null || orderNoOrCode.isEmpty()) throw new ServiceException("缺少核销码");
+        if (orderNoOrCode == null || orderNoOrCode.isEmpty()) throw new ServiceException("请输入订单号");
         FishMallOrder order = orderMapper.selectByOrderNo(orderNoOrCode);
         if (order == null) order = orderMapper.selectByRedeemCode(orderNoOrCode);
-        if (order == null) throw new ServiceException("订单不存在或核销码无效");
+        if (order == null) throw new ServiceException("订单不存在");
         if (order.getStatus() == null) throw new ServiceException("订单状态异常");
-        if (order.getStatus() == 2) throw new ServiceException("该订单已核销");
-        if (order.getStatus() != 1) throw new ServiceException("仅待核销订单可核销");
+        if (order.getStatus() == 2) throw new ServiceException("该订单已领取");
+        if (order.getStatus() != 1) throw new ServiceException("仅已支付未领取订单可确认领取");
 
         int g = orderMapper.updateStatusWithGuard(order.getMallOrderId(), 1, 2);
         if (g == 0) throw new ServiceException("订单状态已变更，请刷新");
