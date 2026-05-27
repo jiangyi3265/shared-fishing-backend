@@ -82,6 +82,8 @@ jobs:
           WX_PAY_NOTIFY: ${{ secrets.WX_PAY_NOTIFY }}
           WX_PAY_CERT_SERIAL: ${{ secrets.WX_PAY_CERT_SERIAL }}
           WX_PAY_PRIVATE_KEY_B64: ${{ secrets.WX_PAY_PRIVATE_KEY_B64 }}
+          WX_PAY_PUBLIC_KEY_ID: ${{ secrets.WX_PAY_PUBLIC_KEY_ID }}
+          WX_PAY_PUBLIC_KEY_B64: ${{ secrets.WX_PAY_PUBLIC_KEY_B64 }}
         run: |
           : "${SSH_HOST:?Missing SSH_HOST secret}"
           : "${SSH_USER:?Missing SSH_USER secret}"
@@ -90,7 +92,7 @@ jobs:
           SERVICE_NAME="${BACKEND_SERVICE:-fishing-backend}"
           SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
-          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' SOURCE_ROOT='${SOURCE_ROOT}' JAR_NAME='${JAR_NAME}' SOURCE_ARCHIVE='${SOURCE_ARCHIVE}' COMMIT_SHA='${GITHUB_SHA}' SERVICE_NAME='${SERVICE_NAME}' WX_APPID='${WX_APPID:-}' WX_SECRET='${WX_SECRET:-}' WX_PAY_MCH_ID='${WX_PAY_MCH_ID:-}' WX_PAY_APIV3='${WX_PAY_APIV3:-}' WX_PAY_NOTIFY='${WX_PAY_NOTIFY:-}' WX_PAY_CERT_SERIAL='${WX_PAY_CERT_SERIAL:-}' WX_PAY_PRIVATE_KEY_B64='${WX_PAY_PRIVATE_KEY_B64:-}' bash -s" <<'EOF'
+          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' SOURCE_ROOT='${SOURCE_ROOT}' JAR_NAME='${JAR_NAME}' SOURCE_ARCHIVE='${SOURCE_ARCHIVE}' COMMIT_SHA='${GITHUB_SHA}' SERVICE_NAME='${SERVICE_NAME}' WX_APPID='${WX_APPID:-}' WX_SECRET='${WX_SECRET:-}' WX_PAY_MCH_ID='${WX_PAY_MCH_ID:-}' WX_PAY_APIV3='${WX_PAY_APIV3:-}' WX_PAY_NOTIFY='${WX_PAY_NOTIFY:-}' WX_PAY_CERT_SERIAL='${WX_PAY_CERT_SERIAL:-}' WX_PAY_PRIVATE_KEY_B64='${WX_PAY_PRIVATE_KEY_B64:-}' WX_PAY_PUBLIC_KEY_ID='${WX_PAY_PUBLIC_KEY_ID:-}' WX_PAY_PUBLIC_KEY_B64='${WX_PAY_PUBLIC_KEY_B64:-}' bash -s" <<'EOF'
           set -euo pipefail
           RELEASE_DIR="${SOURCE_ROOT}/${COMMIT_SHA}"
           case "${RELEASE_DIR}" in
@@ -119,6 +121,7 @@ jobs:
           ENV_FILE="${DEPLOY_DIR}/.env.production"
           CERT_DIR="/opt/fishing/certs"
           PRIVATE_KEY_PATH="${CERT_DIR}/apiclient_key.pem"
+          PUBLIC_KEY_PATH="${CERT_DIR}/wechatpay_public_key.pem"
           touch "${ENV_FILE}"
           chmod 600 "${ENV_FILE}" || true
 
@@ -141,6 +144,11 @@ jobs:
             printf '%s' "${WX_PAY_PRIVATE_KEY_B64}" | base64 -d > "${PRIVATE_KEY_PATH}"
             chmod 600 "${PRIVATE_KEY_PATH}"
           fi
+          if [ -n "${WX_PAY_PUBLIC_KEY_B64:-}" ]; then
+            printf '%s' "${WX_PAY_PUBLIC_KEY_B64}" | base64 -d > "${PUBLIC_KEY_PATH}"
+            chmod 600 "${PUBLIC_KEY_PATH}"
+            WX_PAY_PUBLIC_KEY_ID="${WX_PAY_PUBLIC_KEY_ID:-PUB_KEY_ID_0117250557592025081500292197000800}"
+          fi
 
           upsert_env "WX_PAY_ENABLED" "true"
           upsert_env "WX_PAY_MOCK_ENABLED" "false"
@@ -149,6 +157,10 @@ jobs:
           upsert_env "WX_PAY_NOTIFY" "${WX_PAY_NOTIFY:-}"
           upsert_env "WX_PAY_PRIVATE_KEY" "${PRIVATE_KEY_PATH}"
           upsert_env "WX_PAY_CERT_SERIAL" "${WX_PAY_CERT_SERIAL:-}"
+          if [ -n "${WX_PAY_PUBLIC_KEY_ID:-}" ] || [ -n "${WX_PAY_PUBLIC_KEY_B64:-}" ]; then
+            upsert_env "WX_PAY_PUBLIC_KEY" "${PUBLIC_KEY_PATH}"
+            upsert_env "WX_PAY_PUBLIC_KEY_ID" "${WX_PAY_PUBLIC_KEY_ID:-}"
+          fi
           upsert_env "WX_MOCK_ENABLED" "false"
           upsert_env "WX_APPID" "${WX_APPID:-}"
           upsert_env "WX_SECRET" "${WX_SECRET:-}"
