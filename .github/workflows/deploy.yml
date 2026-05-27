@@ -212,4 +212,55 @@ jobs:
           echo "Backend health check passed:"
           head -c 500 /tmp/fishing-health.json
           echo
+
+          PY_BIN="$(command -v python3 || command -v python || true)"
+          if [ -n "${PY_BIN}" ]; then
+            SERVER_PORT="${SERVER_PORT:-8080}" "${PY_BIN}" - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          server_port = os.environ.get("SERVER_PORT", "8080")
+          roots = [
+              Path("/www/server/panel/vhost/nginx"),
+              Path("/www/server/nginx/conf/vhost"),
+              Path("/etc/nginx/conf.d"),
+              Path("/www/server/nginx/conf"),
+          ]
+          pattern = re.compile(r"(proxy_pass\s+http://(?:127\.0\.0\.1|localhost):)(\d+)(/?)\s*;", re.I)
+          changed = []
+          seen = set()
+          for root in roots:
+              if not root.exists():
+                  continue
+              for path in root.rglob("*.conf"):
+                  if path in seen:
+                      continue
+                  seen.add(path)
+                  try:
+                      text = path.read_text(encoding="utf-8")
+                  except UnicodeDecodeError:
+                      text = path.read_text(encoding="latin-1")
+                  if "prod-api" not in text:
+                      continue
+                  updated = pattern.sub(lambda m: m.group(1) + server_port + m.group(3) + ";", text)
+                  if updated != text:
+                      path.write_text(updated, encoding="utf-8")
+                      changed.append(str(path))
+                  else:
+                      print("nginx_prod_api_found=" + str(path))
+          if changed:
+              print("nginx_proxy_updated=" + ",".join(changed))
+          PY
+          fi
+
+          if command -v nginx >/dev/null 2>&1; then
+            nginx -t
+            nginx -s reload
+          elif [ -x /www/server/nginx/sbin/nginx ]; then
+            /www/server/nginx/sbin/nginx -t
+            /www/server/nginx/sbin/nginx -s reload
+          elif command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files nginx.service --no-legend | grep -q nginx.service; then
+            systemctl reload nginx.service
+          fi
           EOF
