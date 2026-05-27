@@ -104,12 +104,11 @@ public final class ProductionStartupCheck
         {
             errors.add("WX_PAY_CERT_SERIAL 未配置");
         }
-        boolean publicKeyMode = !isBlank(wxPayPublicKey) || !isBlank(wxPayPublicKeyId);
-        if (publicKeyMode && isPlaceholder(wxPayPublicKey))
+        if (isPlaceholder(wxPayPublicKey))
         {
             errors.add("WX_PAY_PUBLIC_KEY 未配置");
         }
-        if (publicKeyMode && isPlaceholder(wxPayPublicKeyId))
+        if (isPlaceholder(wxPayPublicKeyId))
         {
             errors.add("WX_PAY_PUBLIC_KEY_ID 未配置");
         }

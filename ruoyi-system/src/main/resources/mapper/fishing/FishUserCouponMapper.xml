@@ -71,4 +71,10 @@
         set used = 1, used_time = sysdate(), order_id = #{orderId}
         where coupon_id = #{couponId} and used = 0
     </update>
+
+    <update id="releaseCoupon">
+        update fish_user_coupon
+        set used = 0, used_time = null, order_id = null
+        where coupon_id = #{couponId} and order_id = #{orderId}
+    </update>
 </mapper>

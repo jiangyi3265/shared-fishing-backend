@@ -13,4 +13,5 @@ public interface FishUserCouponMapper
     public int insertFishUserCoupon(FishUserCoupon coupon);
     public int updateFishUserCoupon(FishUserCoupon coupon);
     public int useCoupon(@Param("couponId") Long couponId, @Param("orderId") Long orderId);
+    public int releaseCoupon(@Param("couponId") Long couponId, @Param("orderId") Long orderId);
 }

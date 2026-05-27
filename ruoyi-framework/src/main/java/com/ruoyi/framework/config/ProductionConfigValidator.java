@@ -53,6 +53,8 @@ public class ProductionConfigValidator implements BeanFactoryPostProcessor, Envi
         String wxPayNotify = environment.getProperty("wx.pay.notify-url", "");
         String wxPayPrivateKey = environment.getProperty("wx.pay.private-key-path", "");
         String wxPayCertSerial = environment.getProperty("wx.pay.cert-serial", "");
+        String wxPayPublicKey = environment.getProperty("wx.pay.public-key-path", "");
+        String wxPayPublicKeyId = environment.getProperty("wx.pay.public-key-id", "");
         String corsOrigins = environment.getProperty("cors.allowed-origin-patterns", "");
         boolean swaggerEnabled = environment.getProperty("swagger.enabled", Boolean.class, false);
         boolean demoEnabled = environment.getProperty("demo.enabled", Boolean.class, false);
@@ -101,6 +103,14 @@ public class ProductionConfigValidator implements BeanFactoryPostProcessor, Envi
         if (isPlaceholder(wxPayCertSerial))
         {
             errors.add("WX_PAY_CERT_SERIAL 未配置");
+        }
+        if (isPlaceholder(wxPayPublicKey))
+        {
+            errors.add("WX_PAY_PUBLIC_KEY 未配置");
+        }
+        if (isPlaceholder(wxPayPublicKeyId))
+        {
+            errors.add("WX_PAY_PUBLIC_KEY_ID 未配置");
         }
         if (isBlank(corsOrigins) || containsLocalhost(corsOrigins))
         {

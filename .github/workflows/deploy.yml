@@ -145,9 +145,9 @@ jobs:
             chmod 600 "${PRIVATE_KEY_PATH}"
           fi
           if [ -n "${WX_PAY_PUBLIC_KEY_B64:-}" ]; then
+            : "${WX_PAY_PUBLIC_KEY_ID:?Missing WX_PAY_PUBLIC_KEY_ID secret}"
             printf '%s' "${WX_PAY_PUBLIC_KEY_B64}" | base64 -d > "${PUBLIC_KEY_PATH}"
             chmod 600 "${PUBLIC_KEY_PATH}"
-            WX_PAY_PUBLIC_KEY_ID="${WX_PAY_PUBLIC_KEY_ID:-PUB_KEY_ID_0117250557592025081500292197000800}"
           fi
 
           upsert_env "WX_PAY_ENABLED" "true"

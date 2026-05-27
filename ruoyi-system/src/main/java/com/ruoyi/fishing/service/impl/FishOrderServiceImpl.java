@@ -251,7 +251,12 @@ public class FishOrderServiceImpl implements IFishOrderService
         {
             FishUserCoupon coupon = couponMapper.selectFishUserCouponByCouponId(couponId);
             if (coupon == null || !coupon.getUserId().equals(userId)) throw new ServiceException("优惠券不存在");
-            if (coupon.getUsed() != null && coupon.getUsed() == 1) throw new ServiceException("优惠券已使用");
+            boolean reservedForThisOrder = coupon.getUsed() != null && coupon.getUsed() == 1
+                    && order.getOrderId().equals(coupon.getOrderId());
+            if (coupon.getUsed() != null && coupon.getUsed() == 1 && !reservedForThisOrder)
+            {
+                throw new ServiceException("优惠券已使用");
+            }
             if (coupon.getExpireTime() != null && coupon.getExpireTime().before(new Date())) throw new ServiceException("优惠券已过期");
 
             if ("amount".equals(coupon.getCouponType()))
@@ -273,8 +278,11 @@ public class FishOrderServiceImpl implements IFishOrderService
                 discount = Math.min(freeSteps * pricePerStep, finalAmount);
                 finalAmount -= discount;
             }
-            int used = couponMapper.useCoupon(couponId, order.getOrderId());
-            if (used == 0) throw new ServiceException("优惠券已被使用");
+            if (!reservedForThisOrder)
+            {
+                int used = couponMapper.useCoupon(couponId, order.getOrderId());
+                if (used == 0) throw new ServiceException("优惠券已被使用");
+            }
             order.setCouponId(couponId);
         }
 
@@ -320,9 +328,7 @@ public class FishOrderServiceImpl implements IFishOrderService
         FishOrder order = orderMapper.selectFishOrderByOrderNo(orderNo);
         if (order == null) return null;
         if (order.getStatus() == 3) return order;
-        orderMapper.updateOrderStatusWithGuard(order.getOrderId(), order.getStatus(), 3);
-        order.setStatus(3);
-        order.setPaidTime(new Date());
+        Integer expectedStatus = order.getStatus();
         // 优先信任 preparePayment 写入的 amountPaid（含商城金额，不含余额抵扣）
         if (order.getAmountPaid() == null || order.getAmountPaid() <= 0)
         {
@@ -336,19 +342,16 @@ public class FishOrderServiceImpl implements IFishOrderService
         int balanceToDeduct = order.getBalanceCents() == null ? 0 : order.getBalanceCents();
         if (balanceToDeduct > 0)
         {
-            try
-            {
-                balanceService.applyDelta(order.getUserId(), -balanceToDeduct, FishBalanceLog.TYPE_CONSUME_FISHING,
-                        order.getOrderNo(), "钓场订单抵扣", "system");
-            }
-            catch (Exception e)
-            {
-                // 余额不足时降级：记录日志，不阻塞订单完成（preparePayment 时余额已校验）
-                log.error("钓场订单余额扣减失败 orderNo={} balance={} err={}", orderNo, balanceToDeduct, e.getMessage());
-                order.setBalanceCents(0);
-                order.setAmountPaid(order.getAmountPaid() + balanceToDeduct);
-            }
+            balanceService.applyDelta(order.getUserId(), -balanceToDeduct, FishBalanceLog.TYPE_CONSUME_FISHING,
+                    order.getOrderNo(), "钓场订单抵扣", "system");
         }
+        int guarded = orderMapper.updateOrderStatusWithGuard(order.getOrderId(), expectedStatus, 3);
+        if (guarded == 0)
+        {
+            throw new ServiceException("订单状态已变更，请刷新后重试");
+        }
+        order.setStatus(3);
+        order.setPaidTime(new Date());
         orderMapper.updateFishOrder(order);
         // 推进合并支付的商城订单
         settleAttachedMallOrders(order, tradeNo);
@@ -392,6 +395,10 @@ public class FishOrderServiceImpl implements IFishOrderService
         if (order.getStatus() == 3) throw new ServiceException("已完成订单不可取消");
         order.setStatus(4);
         order.setCancelReason(reason == null ? "" : reason);
+        if (order.getCouponId() != null)
+        {
+            couponMapper.releaseCoupon(order.getCouponId(), order.getOrderId());
+        }
         return orderMapper.updateFishOrder(order);
     }
 

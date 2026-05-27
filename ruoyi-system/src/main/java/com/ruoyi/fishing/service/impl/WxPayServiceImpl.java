@@ -223,7 +223,7 @@ public class WxPayServiceImpl implements IWxPayService
             return cb;
         } catch (Throwable t) {
             log.error("WxPay notify parse failed", t);
-            return null;
+            throw new ServiceException("微信支付通知验签失败：" + rootMessage(t));
         }
     }
 
@@ -293,7 +293,7 @@ public class WxPayServiceImpl implements IWxPayService
             return cb;
         } catch (Throwable t) {
             log.error("WxPay refund notify parse failed", t);
-            return null;
+            throw new ServiceException("微信退款通知验签失败：" + rootMessage(t));
         }
     }
 

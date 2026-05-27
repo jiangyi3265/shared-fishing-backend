@@ -38,6 +38,8 @@ public class ProductionEnvironmentPostProcessor implements EnvironmentPostProces
         String wxPayNotify = environment.getProperty("wx.pay.notify-url", "");
         String wxPayPrivateKey = environment.getProperty("wx.pay.private-key-path", "");
         String wxPayCertSerial = environment.getProperty("wx.pay.cert-serial", "");
+        String wxPayPublicKey = environment.getProperty("wx.pay.public-key-path", "");
+        String wxPayPublicKeyId = environment.getProperty("wx.pay.public-key-id", "");
 
         if (isBlank(dbPassword) || DEV_DB_PASSWORD.equals(dbPassword))
         {
@@ -82,6 +84,14 @@ public class ProductionEnvironmentPostProcessor implements EnvironmentPostProces
         if (isPlaceholder(wxPayCertSerial))
         {
             errors.add("WX_PAY_CERT_SERIAL 未配置");
+        }
+        if (isPlaceholder(wxPayPublicKey))
+        {
+            errors.add("WX_PAY_PUBLIC_KEY 未配置");
+        }
+        if (isPlaceholder(wxPayPublicKeyId))
+        {
+            errors.add("WX_PAY_PUBLIC_KEY_ID 未配置");
         }
         if (isBlank(corsOrigins) || containsLocalhost(corsOrigins))
         {

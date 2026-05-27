@@ -145,17 +145,8 @@ public class FishMallServiceImpl implements IFishMallService
         // 真正扣减余额（如有）
         if (balance > 0)
         {
-            try
-            {
-                balanceService.applyDelta(order.getUserId(), -balance, FishBalanceLog.TYPE_CONSUME_MALL,
-                        order.getMallOrderNo(), "商城订单抵扣", "system");
-            }
-            catch (Exception e)
-            {
-                log.error("商城订单余额扣减失败 orderNo={} balance={} err={}", orderNo, balance, e.getMessage());
-                balance = 0;
-                order.setBalanceCents(0);
-            }
+            balanceService.applyDelta(order.getUserId(), -balance, FishBalanceLog.TYPE_CONSUME_MALL,
+                    order.getMallOrderNo(), "商城订单抵扣", "system");
         }
         order.setStatus(1);
         order.setPaidTime(new Date());
