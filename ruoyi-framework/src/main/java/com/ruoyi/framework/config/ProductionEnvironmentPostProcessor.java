@@ -26,20 +26,20 @@ public class ProductionEnvironmentPostProcessor implements EnvironmentPostProces
         }
 
         List<String> errors = new ArrayList<>();
-        String dbPassword = environment.getProperty("spring.datasource.druid.master.password", "");
-        String tokenSecret = environment.getProperty("token.secret", "");
-        String wxSecret = environment.getProperty("wx.miniapp.secret", "");
-        String corsOrigins = environment.getProperty("cors.allowed-origin-patterns", "");
-        boolean wxMockEnabled = environment.getProperty("wx.miniapp.mock-enabled", Boolean.class, true);
-        boolean wxPayEnabled = environment.getProperty("wx.pay.enabled", Boolean.class, false);
-        boolean wxPayMockEnabled = environment.getProperty("wx.pay.mock-enabled", Boolean.class, true);
-        String wxPayMchId = environment.getProperty("wx.pay.mch-id", "");
-        String wxPayApiV3 = environment.getProperty("wx.pay.api-v3-key", "");
-        String wxPayNotify = environment.getProperty("wx.pay.notify-url", "");
-        String wxPayPrivateKey = environment.getProperty("wx.pay.private-key-path", "");
-        String wxPayCertSerial = environment.getProperty("wx.pay.cert-serial", "");
-        String wxPayPublicKey = environment.getProperty("wx.pay.public-key-path", "");
-        String wxPayPublicKeyId = environment.getProperty("wx.pay.public-key-id", "");
+        String dbPassword = configValue(environment, "spring.datasource.druid.master.password", "DB_PASSWORD", "");
+        String tokenSecret = configValue(environment, "token.secret", "TOKEN_SECRET", "");
+        String wxSecret = configValue(environment, "wx.miniapp.secret", "WX_SECRET", "");
+        String corsOrigins = configValue(environment, "cors.allowed-origin-patterns", "CORS_ALLOWED_ORIGINS", "");
+        boolean wxMockEnabled = configBoolean(environment, "wx.miniapp.mock-enabled", "WX_MOCK_ENABLED", true);
+        boolean wxPayEnabled = configBoolean(environment, "wx.pay.enabled", "WX_PAY_ENABLED", false);
+        boolean wxPayMockEnabled = configBoolean(environment, "wx.pay.mock-enabled", "WX_PAY_MOCK_ENABLED", true);
+        String wxPayMchId = configValue(environment, "wx.pay.mch-id", "WX_PAY_MCH_ID", "");
+        String wxPayApiV3 = configValue(environment, "wx.pay.api-v3-key", "WX_PAY_APIV3", "");
+        String wxPayNotify = configValue(environment, "wx.pay.notify-url", "WX_PAY_NOTIFY", "");
+        String wxPayPrivateKey = configValue(environment, "wx.pay.private-key-path", "WX_PAY_PRIVATE_KEY", "");
+        String wxPayCertSerial = configValue(environment, "wx.pay.cert-serial", "WX_PAY_CERT_SERIAL", "");
+        String wxPayPublicKey = configValue(environment, "wx.pay.public-key-path", "WX_PAY_PUBLIC_KEY", "");
+        String wxPayPublicKeyId = configValue(environment, "wx.pay.public-key-id", "WX_PAY_PUBLIC_KEY_ID", "");
 
         if (isBlank(dbPassword) || DEV_DB_PASSWORD.equals(dbPassword))
         {
@@ -97,11 +97,11 @@ public class ProductionEnvironmentPostProcessor implements EnvironmentPostProces
         {
             errors.add("CORS_ALLOWED_ORIGINS 必须替换为正式域名");
         }
-        if (environment.getProperty("swagger.enabled", Boolean.class, false))
+        if (configBoolean(environment, "swagger.enabled", "SWAGGER_ENABLED", false))
         {
             errors.add("SWAGGER_ENABLED 生产环境必须为 false");
         }
-        if (environment.getProperty("demo.enabled", Boolean.class, false))
+        if (configBoolean(environment, "demo.enabled", "DEMO_ENABLED", false))
         {
             errors.add("DEMO_ENABLED 生产环境必须为 false");
         }
@@ -120,6 +120,26 @@ public class ProductionEnvironmentPostProcessor implements EnvironmentPostProces
     private boolean isBlank(String value)
     {
         return value == null || value.trim().isEmpty();
+    }
+
+    private String configValue(ConfigurableEnvironment environment, String propertyName, String envName, String defaultValue)
+    {
+        String value = environment.getProperty(propertyName);
+        if (isBlank(value))
+        {
+            value = environment.getProperty(envName);
+        }
+        if (isBlank(value))
+        {
+            value = System.getenv(envName);
+        }
+        return isBlank(value) ? defaultValue : value;
+    }
+
+    private boolean configBoolean(ConfigurableEnvironment environment, String propertyName, String envName, boolean defaultValue)
+    {
+        String value = configValue(environment, propertyName, envName, "");
+        return isBlank(value) ? defaultValue : Boolean.parseBoolean(value);
     }
 
     private boolean isPlaceholder(String value)
