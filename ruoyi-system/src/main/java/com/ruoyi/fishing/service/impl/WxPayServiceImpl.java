@@ -14,9 +14,8 @@ import com.ruoyi.fishing.service.IWxPayService;
 /**
  * WeChat Pay V3 JSAPI service.
  *
- * Supports both legacy auto platform-certificate mode and the newer WeChat Pay
- * public-key mode. Configure WX_PAY_PUBLIC_KEY + WX_PAY_PUBLIC_KEY_ID to use
- * public-key mode and avoid /v3/certificates initialization failures.
+ * Uses WeChat Pay public-key mode. This merchant has no available platform
+ * certificates, so auto-certificate mode would fail on /v3/certificates.
  */
 @Service
 public class WxPayServiceImpl implements IWxPayService
@@ -46,38 +45,23 @@ public class WxPayServiceImpl implements IWxPayService
             WxProperties.Pay pay = wxProperties.getPay();
             Object config;
             Object notificationConfig;
-            if (usePublicKeyMode(pay))
-            {
-                Class<?> cfgBuilder = Class.forName("com.wechat.pay.java.core.RSAPublicKeyConfig$Builder");
-                Object builder = cfgBuilder.getDeclaredConstructor().newInstance();
-                cfgBuilder.getMethod("merchantId", String.class).invoke(builder, pay.getMchId());
-                cfgBuilder.getMethod("privateKeyFromPath", String.class).invoke(builder, pay.getPrivateKeyPath());
-                cfgBuilder.getMethod("merchantSerialNumber", String.class).invoke(builder, pay.getCertSerial());
-                cfgBuilder.getMethod("apiV3Key", String.class).invoke(builder, pay.getApiV3Key());
-                cfgBuilder.getMethod("publicKeyFromPath", String.class).invoke(builder, pay.getPublicKeyPath());
-                cfgBuilder.getMethod("publicKeyId", String.class).invoke(builder, pay.getPublicKeyId());
-                config = cfgBuilder.getMethod("build").invoke(builder);
+            Class<?> cfgBuilder = Class.forName("com.wechat.pay.java.core.RSAPublicKeyConfig$Builder");
+            Object builder = cfgBuilder.getDeclaredConstructor().newInstance();
+            cfgBuilder.getMethod("merchantId", String.class).invoke(builder, pay.getMchId());
+            cfgBuilder.getMethod("privateKeyFromPath", String.class).invoke(builder, pay.getPrivateKeyPath());
+            cfgBuilder.getMethod("merchantSerialNumber", String.class).invoke(builder, pay.getCertSerial());
+            cfgBuilder.getMethod("apiV3Key", String.class).invoke(builder, pay.getApiV3Key());
+            cfgBuilder.getMethod("publicKeyFromPath", String.class).invoke(builder, pay.getPublicKeyPath());
+            cfgBuilder.getMethod("publicKeyId", String.class).invoke(builder, pay.getPublicKeyId());
+            config = cfgBuilder.getMethod("build").invoke(builder);
 
-                Class<?> ncBuilder = Class.forName("com.wechat.pay.java.core.notification.RSAPublicKeyNotificationConfig$Builder");
-                Object nb = ncBuilder.getDeclaredConstructor().newInstance();
-                ncBuilder.getMethod("apiV3Key", String.class).invoke(nb, pay.getApiV3Key());
-                ncBuilder.getMethod("publicKeyFromPath", String.class).invoke(nb, pay.getPublicKeyPath());
-                ncBuilder.getMethod("publicKeyId", String.class).invoke(nb, pay.getPublicKeyId());
-                notificationConfig = ncBuilder.getMethod("build").invoke(nb);
-                log.info("WxPay SDK initialized with WeChat Pay public key mode");
-            }
-            else
-            {
-                Class<?> cfgBuilder = Class.forName("com.wechat.pay.java.core.RSAAutoCertificateConfig$Builder");
-                Object builder = cfgBuilder.getDeclaredConstructor().newInstance();
-                cfgBuilder.getMethod("merchantId", String.class).invoke(builder, pay.getMchId());
-                cfgBuilder.getMethod("privateKeyFromPath", String.class).invoke(builder, pay.getPrivateKeyPath());
-                cfgBuilder.getMethod("merchantSerialNumber", String.class).invoke(builder, pay.getCertSerial());
-                cfgBuilder.getMethod("apiV3Key", String.class).invoke(builder, pay.getApiV3Key());
-                config = cfgBuilder.getMethod("build").invoke(builder);
-                notificationConfig = config;
-                log.info("WxPay SDK initialized with auto certificate mode");
-            }
+            Class<?> ncBuilder = Class.forName("com.wechat.pay.java.core.notification.RSAPublicKeyNotificationConfig$Builder");
+            Object nb = ncBuilder.getDeclaredConstructor().newInstance();
+            ncBuilder.getMethod("apiV3Key", String.class).invoke(nb, pay.getApiV3Key());
+            ncBuilder.getMethod("publicKeyFromPath", String.class).invoke(nb, pay.getPublicKeyPath());
+            ncBuilder.getMethod("publicKeyId", String.class).invoke(nb, pay.getPublicKeyId());
+            notificationConfig = ncBuilder.getMethod("build").invoke(nb);
+            log.info("WxPay SDK initialized with WeChat Pay public key mode");
 
             Class<?> svcBuilder = Class.forName("com.wechat.pay.java.service.payments.jsapi.JsapiServiceExtension$Builder");
             Object sb = svcBuilder.getDeclaredConstructor().newInstance();
@@ -121,20 +105,16 @@ public class WxPayServiceImpl implements IWxPayService
             throw new ServiceException("微信支付初始化失败：商户私钥文件不存在或不可读");
         }
         if (isBlank(pay.getCertSerial())) throw new ServiceException("微信支付初始化失败：WX_PAY_CERT_SERIAL 未配置");
-        if (usePublicKeyMode(pay))
-        {
-            if (isBlank(pay.getPublicKeyPath())) throw new ServiceException("微信支付初始化失败：WX_PAY_PUBLIC_KEY 未配置");
-            if (isBlank(pay.getPublicKeyId())) throw new ServiceException("微信支付初始化失败：WX_PAY_PUBLIC_KEY_ID 未配置");
-            File publicKey = new File(pay.getPublicKeyPath());
-            if (!publicKey.isFile() || !publicKey.canRead()) {
-                throw new ServiceException("微信支付初始化失败：WX_PAY_PUBLIC_KEY 文件不存在或不可读");
-            }
+        if (isBlank(pay.getPublicKeyPath())) {
+            throw new ServiceException("微信支付初始化失败：WX_PAY_PUBLIC_KEY 未配置，请配置 WX_PAY_PUBLIC_KEY_B64 并重新部署");
         }
-    }
-
-    private boolean usePublicKeyMode(WxProperties.Pay pay)
-    {
-        return !isBlank(pay.getPublicKeyPath()) || !isBlank(pay.getPublicKeyId());
+        if (isBlank(pay.getPublicKeyId())) {
+            throw new ServiceException("微信支付初始化失败：WX_PAY_PUBLIC_KEY_ID 未配置");
+        }
+        File publicKey = new File(pay.getPublicKeyPath());
+        if (!publicKey.isFile() || !publicKey.canRead()) {
+            throw new ServiceException("微信支付初始化失败：WX_PAY_PUBLIC_KEY 文件不存在或不可读，请配置 WX_PAY_PUBLIC_KEY_B64 并重新部署");
+        }
     }
 
     private boolean isBlank(String value)
