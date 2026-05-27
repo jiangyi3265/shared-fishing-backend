@@ -161,6 +161,8 @@ jobs:
             upsert_env "WX_PAY_PUBLIC_KEY" "${PUBLIC_KEY_PATH}"
             upsert_env "WX_PAY_PUBLIC_KEY_ID" "${WX_PAY_PUBLIC_KEY_ID:-}"
           fi
+          upsert_env "APP_ENV" "production"
+          upsert_env "SERVER_PORT" "8080"
           upsert_env "WX_MOCK_ENABLED" "false"
           upsert_env "WX_APPID" "${WX_APPID:-}"
           upsert_env "WX_SECRET" "${WX_SECRET:-}"
@@ -185,4 +187,17 @@ jobs:
             echo "Jar uploaded to ${DEPLOY_DIR}/dy.jar."
             echo "Systemd service ${SERVICE_NAME}.service and ry.sh were not found. Restart the backend manually or add BACKEND_SERVICE secret."
           fi
+
+          sleep 15
+          if [ -f ry.sh ]; then
+            ./ry.sh status
+          fi
+          if ! curl -fsS --max-time 15 "http://127.0.0.1:${SERVER_PORT:-8080}/app/venue/default" >/tmp/fishing-health.json; then
+            echo "Backend health check failed. Last application logs:"
+            tail -n 200 "${DEPLOY_DIR}/logs/${JAR_NAME}.log" || true
+            exit 1
+          fi
+          echo "Backend health check passed:"
+          head -c 500 /tmp/fishing-health.json
+          echo
           EOF
