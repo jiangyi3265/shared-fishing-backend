@@ -1,6 +1,7 @@
 package com.ruoyi.fishing.service.impl;
 
 import java.io.File;
+import java.lang.reflect.Array;
 import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -69,8 +70,11 @@ public class WxPayServiceImpl implements IWxPayService
             jsapiService = svcBuilder.getMethod("build").invoke(sb);
 
             Class<?> parser = Class.forName("com.wechat.pay.java.core.notification.NotificationParser");
-            notificationParser = parser.getConstructor(Class.forName("com.wechat.pay.java.core.notification.NotificationConfig"))
-                    .newInstance(notificationConfig);
+            Class<?> notificationConfigClass = Class.forName("com.wechat.pay.java.core.notification.NotificationConfig");
+            Object notificationConfigs = Array.newInstance(notificationConfigClass, 1);
+            Array.set(notificationConfigs, 0, notificationConfig);
+            notificationParser = parser.getConstructor(notificationConfigs.getClass())
+                    .newInstance(notificationConfigs);
 
             Class<?> refundBuilder = Class.forName("com.wechat.pay.java.service.refund.RefundService$Builder");
             Object rb = refundBuilder.getDeclaredConstructor().newInstance();
