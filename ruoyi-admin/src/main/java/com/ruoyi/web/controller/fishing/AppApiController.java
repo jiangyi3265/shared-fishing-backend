@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import com.ruoyi.common.annotation.Anonymous;
 import com.ruoyi.common.core.domain.AjaxResult;
+import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.fishing.domain.FishAd;
 import com.ruoyi.fishing.domain.FishOrder;
 import com.ruoyi.fishing.domain.FishQrcode;
@@ -184,13 +185,14 @@ public class AppApiController
         if (userId == null) return unauthorized();
         Long bodyUserId = parseLong(body.get("userId"));
         if (bodyUserId != null && !bodyUserId.equals(userId)) return unauthorized();
+        FishQrcode qr = requireScanQrcode(body, "start");
         Long venueId = parseLong(body.get("venueId"));
-        if (venueId == null)
+        if (venueId != null && qr.getVenueId() != null && !venueId.equals(qr.getVenueId()))
         {
-            List<FishVenue> all = venueService.selectFishVenueList(new FishVenue());
-            if (all.isEmpty()) return AjaxResult.error("未配置钓场");
-            venueId = all.get(0).getVenueId();
+            return AjaxResult.error("入口码与当前钓场不匹配");
         }
+        venueId = qr.getVenueId();
+        if (venueId == null) return AjaxResult.error("入口码未绑定钓场");
         return AjaxResult.success(orderService.startOrder(userId, venueId));
     }
 
@@ -221,6 +223,13 @@ public class AppApiController
         if (userId == null) return unauthorized();
         Long bodyUserId = parseLong(body.get("userId"));
         if (bodyUserId != null && !bodyUserId.equals(userId)) return unauthorized();
+        FishQrcode qr = requireScanQrcode(body, "end");
+        FishOrder running = orderService.selectRunningOrder(userId);
+        if (running == null) return AjaxResult.error("未检测到进行中的订单");
+        if (qr.getVenueId() != null && running.getVenueId() != null && !qr.getVenueId().equals(running.getVenueId()))
+        {
+            return AjaxResult.error("出口码与当前订单钓场不匹配");
+        }
         return AjaxResult.success(orderService.finishOrder(userId));
     }
 
@@ -735,6 +744,38 @@ public class AppApiController
             res.put("code", "FAIL"); res.put("message", "处理失败");
         }
         return res;
+    }
+
+    private FishQrcode requireScanQrcode(Map<String, Object> body, String expectedType)
+    {
+        FishQrcode qr = resolveRequestQrcode(body);
+        if (qr == null)
+        {
+            throw new ServiceException("start".equals(expectedType) ? "请先扫描入口码" : "请先扫描出口码");
+        }
+        if ("1".equals(qr.getStatus()))
+        {
+            throw new ServiceException("二维码已停用");
+        }
+        if (!expectedType.equals(qr.getQrType()))
+        {
+            throw new ServiceException("start".equals(expectedType) ? "请扫描入口码" : "请扫描出口码");
+        }
+        return qr;
+    }
+
+    private FishQrcode resolveRequestQrcode(Map<String, Object> body)
+    {
+        if (body == null) return null;
+        Long qrId = parseLong(body.get("qrId"));
+        if (qrId != null) return qrcodeMapper.selectFishQrcodeByQrId(qrId);
+
+        String scene = body.get("scene") == null ? "" : String.valueOf(body.get("scene")).trim();
+        if (scene.isEmpty()) return null;
+        FishQrcode query = new FishQrcode();
+        query.setSceneValue(scene);
+        List<FishQrcode> list = qrcodeMapper.selectFishQrcodeList(query);
+        return list.isEmpty() ? null : list.get(0);
     }
 
     private Long parseLong(Object v)
