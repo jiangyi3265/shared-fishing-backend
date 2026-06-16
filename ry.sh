@@ -57,9 +57,19 @@ function stop()
 	if [ x"$PID" != x"" ]; then
 		kill -TERM $PID
 		echo "$AppName (pid:$PID) exiting..."
+		WAIT_SECONDS=0
 		while [ x"$PID" != x"" ]
 		do
+			if [ "$WAIT_SECONDS" -ge 60 ]; then
+				echo "$AppName did not exit after ${WAIT_SECONDS}s; killing it..."
+				kill -KILL $PID 2>/dev/null || true
+			fi
+			if [ "$WAIT_SECONDS" -ge 75 ]; then
+				echo "$AppName failed to stop."
+				exit 1
+			fi
 			sleep 1
+			WAIT_SECONDS=$((WAIT_SECONDS + 1))
 			query
 		done
 		echo "$AppName exited."
