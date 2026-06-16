@@ -5,15 +5,17 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-backend
   cancel-in-progress: true
 
 env:
   DEPLOY_DIR: /www/wwwroot/dyjava
-  SOURCE_ROOT: /www/wwwroot/dyjava-source
   JAR_NAME: dy.jar
-  SOURCE_ARCHIVE: backend-source.tar.gz
+  PACKAGE_NAME: backend-deploy.tar.gz
 
 jobs:
   deploy:
@@ -33,248 +35,254 @@ jobs:
       - name: Build
         run: mvn -B -DskipTests clean package
 
-      - name: Package source
-        run: |
-          SOURCE_ARCHIVE_PATH="/tmp/${SOURCE_ARCHIVE}"
-          rm -f "${SOURCE_ARCHIVE_PATH}"
-          tar \
-            --exclude='.git' \
-            --exclude='*/target' \
-            --exclude='*/target/*' \
-            -czf "${SOURCE_ARCHIVE_PATH}" .
-          mv "${SOURCE_ARCHIVE_PATH}" "${SOURCE_ARCHIVE}"
-          ls -lh "${SOURCE_ARCHIVE}"
-
-      - name: Install SSH helper
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y sshpass
-
-      - name: Upload source
-        timeout-minutes: 10
+      - name: Package deploy files
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
-        run: |
-          : "${SSH_HOST:?Missing SSH_HOST secret}"
-          : "${SSH_USER:?Missing SSH_USER secret}"
-          : "${SSH_PASSWORD:?Missing SSH_PASSWORD secret}"
-          SSH_PORT="${SSH_PORT:-22}"
-          SSH_OPTS="-C -o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
-
-          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_DIR}'"
-          sshpass -p "${SSH_PASSWORD}" scp ${SSH_OPTS} -P "${SSH_PORT}" "${SOURCE_ARCHIVE}" "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/${SOURCE_ARCHIVE}"
-
-      - name: Build on server and restart
-        timeout-minutes: 45
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
-          BACKEND_SERVICE: ${{ secrets.BACKEND_SERVICE }}
+          BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          REDIS_HOST: ${{ secrets.REDIS_HOST }}
+          REDIS_PORT: ${{ secrets.REDIS_PORT }}
+          REDIS_DATABASE: ${{ secrets.REDIS_DATABASE }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           TOKEN_SECRET: ${{ secrets.TOKEN_SECRET }}
+          CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
+          DRUID_STAT_USER: ${{ secrets.DRUID_STAT_USER }}
+          DRUID_STAT_PASSWORD: ${{ secrets.DRUID_STAT_PASSWORD }}
           WX_APPID: ${{ secrets.WX_APPID }}
           WX_SECRET: ${{ secrets.WX_SECRET }}
           WX_PAY_MCH_ID: ${{ secrets.WX_PAY_MCH_ID }}
           WX_PAY_APIV3: ${{ secrets.WX_PAY_APIV3 }}
           WX_PAY_NOTIFY: ${{ secrets.WX_PAY_NOTIFY }}
           WX_PAY_CERT_SERIAL: ${{ secrets.WX_PAY_CERT_SERIAL }}
-          WX_PAY_PRIVATE_KEY_B64: ${{ secrets.WX_PAY_PRIVATE_KEY_B64 }}
           WX_PAY_PUBLIC_KEY_ID: ${{ secrets.WX_PAY_PUBLIC_KEY_ID }}
+          WEATHER_QWEATHER_KEY: ${{ secrets.WEATHER_QWEATHER_KEY }}
+          WX_PAY_PRIVATE_KEY_B64: ${{ secrets.WX_PAY_PRIVATE_KEY_B64 }}
           WX_PAY_PUBLIC_KEY_B64: ${{ secrets.WX_PAY_PUBLIC_KEY_B64 }}
         run: |
-          : "${SSH_HOST:?Missing SSH_HOST secret}"
-          : "${SSH_USER:?Missing SSH_USER secret}"
-          : "${SSH_PASSWORD:?Missing SSH_PASSWORD secret}"
-          SSH_PORT="${SSH_PORT:-22}"
-          SERVICE_NAME="${BACKEND_SERVICE:-fishing-backend}"
-          SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
-
-          sshpass -p "${SSH_PASSWORD}" ssh ${SSH_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "DEPLOY_DIR='${DEPLOY_DIR}' SOURCE_ROOT='${SOURCE_ROOT}' JAR_NAME='${JAR_NAME}' SOURCE_ARCHIVE='${SOURCE_ARCHIVE}' COMMIT_SHA='${GITHUB_SHA}' SERVICE_NAME='${SERVICE_NAME}' DB_NAME='${DB_NAME:-}' DB_USER='${DB_USER:-}' DB_PASSWORD='${DB_PASSWORD:-}' TOKEN_SECRET='${TOKEN_SECRET:-}' WX_APPID='${WX_APPID:-}' WX_SECRET='${WX_SECRET:-}' WX_PAY_MCH_ID='${WX_PAY_MCH_ID:-}' WX_PAY_APIV3='${WX_PAY_APIV3:-}' WX_PAY_NOTIFY='${WX_PAY_NOTIFY:-}' WX_PAY_CERT_SERIAL='${WX_PAY_CERT_SERIAL:-}' WX_PAY_PRIVATE_KEY_B64='${WX_PAY_PRIVATE_KEY_B64:-}' WX_PAY_PUBLIC_KEY_ID='${WX_PAY_PUBLIC_KEY_ID:-}' WX_PAY_PUBLIC_KEY_B64='${WX_PAY_PUBLIC_KEY_B64:-}' bash -s" <<'EOF'
           set -euo pipefail
-          RELEASE_DIR="${SOURCE_ROOT}/${COMMIT_SHA}"
-          case "${RELEASE_DIR}" in
-            "${SOURCE_ROOT}"/*) ;;
-            *) echo "Invalid release directory: ${RELEASE_DIR}"; exit 1 ;;
-          esac
 
-          mkdir -p "${DEPLOY_DIR}" "${SOURCE_ROOT}"
-          rm -rf "${RELEASE_DIR}"
-          mkdir -p "${RELEASE_DIR}"
-          tar -xzf "${DEPLOY_DIR}/${SOURCE_ARCHIVE}" -C "${RELEASE_DIR}"
-          rm -f "${DEPLOY_DIR}/${SOURCE_ARCHIVE}"
+          test -f "ruoyi-admin/target/${JAR_NAME}"
+          rm -rf deploy-package "${PACKAGE_NAME}"
+          mkdir -p deploy-package
 
-          if ! command -v mvn >/dev/null 2>&1; then
-            if command -v apt-get >/dev/null 2>&1; then
-              apt-get update
-              apt-get install -y maven
-            elif command -v yum >/dev/null 2>&1; then
-              yum install -y maven
-            else
-              echo "mvn command not found and no supported package manager is available."
-              exit 1
-            fi
+          cp "ruoyi-admin/target/${JAR_NAME}" "deploy-package/${JAR_NAME}"
+          cp ry.sh deploy-package/ry.sh
+
+          if [ -n "${BACKEND_ENV:-}" ]; then
+            printf '%s\n' "${BACKEND_ENV}" > deploy-package/.env.production
+          elif [ -n "${DB_USER:-}" ] || [ -n "${DB_PASSWORD:-}" ] || [ -n "${TOKEN_SECRET:-}" ] || [ -n "${WX_APPID:-}" ] || [ -n "${WX_SECRET:-}" ]; then
+            write_env() {
+              key="$1"
+              value="$2"
+              [ -n "${value}" ] || return 0
+              printf '%s=%s\n' "${key}" "${value}" >> deploy-package/.env.production
+            }
+
+            write_env APP_ENV production
+            write_env SERVER_PORT "${SERVER_PORT:-8080}"
+            write_env DB_HOST "${DB_HOST:-localhost}"
+            write_env DB_PORT "${DB_PORT:-3306}"
+            write_env DB_NAME "${DB_NAME:-ha}"
+            write_env DB_USER "${DB_USER:-}"
+            write_env DB_PASSWORD "${DB_PASSWORD:-}"
+            write_env REDIS_HOST "${REDIS_HOST:-127.0.0.1}"
+            write_env REDIS_PORT "${REDIS_PORT:-6379}"
+            write_env REDIS_DATABASE "${REDIS_DATABASE:-0}"
+            write_env REDIS_PASSWORD "${REDIS_PASSWORD:-}"
+            write_env TOKEN_SECRET "${TOKEN_SECRET:-}"
+            write_env CORS_ALLOWED_ORIGINS "${CORS_ALLOWED_ORIGINS:-https://ht.diaoyuus.cn,https://www.diaoyuus.cn}"
+            write_env SWAGGER_ENABLED false
+            write_env DRUID_STAT_ENABLED false
+            write_env DRUID_STAT_USER "${DRUID_STAT_USER:-ruoyi}"
+            write_env DRUID_STAT_PASSWORD "${DRUID_STAT_PASSWORD:-}"
+            write_env DEMO_ENABLED false
+            write_env WX_APPID "${WX_APPID:-}"
+            write_env WX_SECRET "${WX_SECRET:-}"
+            write_env WX_MOCK_ENABLED false
+            write_env WX_TOKEN_EXPIRE_DAYS 30
+            write_env WX_PAY_ENABLED true
+            write_env WX_PAY_MOCK_ENABLED false
+            write_env WX_PAY_MCH_ID "${WX_PAY_MCH_ID:-}"
+            write_env WX_PAY_APIV3 "${WX_PAY_APIV3:-}"
+            write_env WX_PAY_NOTIFY "${WX_PAY_NOTIFY:-}"
+            write_env WX_PAY_PRIVATE_KEY "${DEPLOY_DIR}/certs/apiclient_key.pem"
+            write_env WX_PAY_CERT_SERIAL "${WX_PAY_CERT_SERIAL:-}"
+            write_env WX_PAY_PUBLIC_KEY "${DEPLOY_DIR}/certs/wechatpay_public_key.pem"
+            write_env WX_PAY_PUBLIC_KEY_ID "${WX_PAY_PUBLIC_KEY_ID:-}"
+            write_env WEATHER_QWEATHER_KEY "${WEATHER_QWEATHER_KEY:-}"
+          else
+            echo "No backend environment secrets configured; keeping the server's existing .env.production."
           fi
 
-          ENV_FILE="${DEPLOY_DIR}/.env.production"
-          CERT_DIR="/opt/fishing/certs"
-          PRIVATE_KEY_PATH="${CERT_DIR}/apiclient_key.pem"
-          PUBLIC_KEY_PATH="${CERT_DIR}/wechatpay_public_key.pem"
-          touch "${ENV_FILE}"
-          chmod 600 "${ENV_FILE}" || true
+          if [ -n "${WX_PAY_PRIVATE_KEY_B64:-}" ] || [ -n "${WX_PAY_PUBLIC_KEY_B64:-}" ]; then
+            mkdir -p deploy-package/certs
+          fi
+          if [ -n "${WX_PAY_PRIVATE_KEY_B64:-}" ]; then
+            printf '%s' "${WX_PAY_PRIVATE_KEY_B64}" | base64 --decode > deploy-package/certs/apiclient_key.pem
+          fi
+          if [ -n "${WX_PAY_PUBLIC_KEY_B64:-}" ]; then
+            printf '%s' "${WX_PAY_PUBLIC_KEY_B64}" | base64 --decode > deploy-package/certs/wechatpay_public_key.pem
+          fi
 
-          upsert_env() {
-            key="$1"
-            value="$2"
-            [ -n "${value}" ] || return 0
-            if grep -q "^${key}=" "${ENV_FILE}"; then
-              tmp_file="$(mktemp)"
-              awk -v k="${key}" -v v="${value}" 'BEGIN{done=0} $0 ~ "^" k "=" {print k "=" v; done=1; next} {print} END{if(!done) print k "=" v}' "${ENV_FILE}" > "${tmp_file}"
-              cat "${tmp_file}" > "${ENV_FILE}"
-              rm -f "${tmp_file}"
+          tar -czf "${PACKAGE_NAME}" -C deploy-package .
+          ls -lh "${PACKAGE_NAME}"
+
+      - name: Install SSH helper
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Upload and restart
+        timeout-minutes: 15
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          BACKEND_SERVICE: ${{ secrets.BACKEND_SERVICE }}
+          BACKEND_HEALTH_URL: ${{ secrets.BACKEND_HEALTH_URL }}
+        run: |
+          set -euo pipefail
+
+          : "${SSH_HOST:?Missing SSH_HOST secret}"
+          : "${SSH_USER:?Missing SSH_USER secret}"
+          SSH_PORT="${SSH_PORT:-22}"
+
+          if [ -z "${SSH_PRIVATE_KEY:-}" ] && [ -z "${SSH_PASSWORD:-}" ]; then
+            echo "Set either SSH_PRIVATE_KEY or SSH_PASSWORD in GitHub Actions secrets."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh_cmd=(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -p "${SSH_PORT}")
+          scp_cmd=(scp -o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -P "${SSH_PORT}")
+
+          if [ -n "${SSH_PRIVATE_KEY:-}" ]; then
+            printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            ssh_cmd+=(-i ~/.ssh/deploy_key)
+            scp_cmd+=(-i ~/.ssh/deploy_key)
+          fi
+
+          remote="${SSH_USER}@${SSH_HOST}"
+
+          remote_ssh() {
+            if [ -n "${SSH_PRIVATE_KEY:-}" ]; then
+              "${ssh_cmd[@]}" "${remote}" "$@"
             else
-              printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
+              sshpass -p "${SSH_PASSWORD}" "${ssh_cmd[@]}" "${remote}" "$@"
             fi
           }
 
-          mkdir -p "${CERT_DIR}"
-          if [ -n "${WX_PAY_PRIVATE_KEY_B64:-}" ]; then
-            printf '%s' "${WX_PAY_PRIVATE_KEY_B64}" | base64 -d > "${PRIVATE_KEY_PATH}"
-            chmod 600 "${PRIVATE_KEY_PATH}"
-          fi
-          if [ -n "${WX_PAY_PUBLIC_KEY_B64:-}" ]; then
-            : "${WX_PAY_PUBLIC_KEY_ID:?Missing WX_PAY_PUBLIC_KEY_ID secret}"
-            printf '%s' "${WX_PAY_PUBLIC_KEY_B64}" | base64 -d > "${PUBLIC_KEY_PATH}"
-            chmod 600 "${PUBLIC_KEY_PATH}"
+          remote_scp() {
+            if [ -n "${SSH_PRIVATE_KEY:-}" ]; then
+              "${scp_cmd[@]}" "$1" "${remote}:$2"
+            else
+              sshpass -p "${SSH_PASSWORD}" "${scp_cmd[@]}" "$1" "${remote}:$2"
+            fi
+          }
+
+          remote_ssh "mkdir -p '${DEPLOY_DIR}'"
+          remote_scp "${PACKAGE_NAME}" "${DEPLOY_DIR}/${PACKAGE_NAME}"
+          printf '%s' "${BACKEND_SERVICE:-}" > .backend_service
+          printf '%s' "${BACKEND_HEALTH_URL:-}" > .backend_health_url
+          remote_scp .backend_service "${DEPLOY_DIR}/.backend_service"
+          remote_scp .backend_health_url "${DEPLOY_DIR}/.backend_health_url"
+
+          remote_ssh "bash -s" -- "${DEPLOY_DIR}" "${JAR_NAME}" "${PACKAGE_NAME}" <<'EOF'
+          set -euo pipefail
+
+          DEPLOY_DIR="$1"
+          JAR_NAME="$2"
+          PACKAGE_NAME="$3"
+          SERVICE_NAME="$(cat "${DEPLOY_DIR}/.backend_service" 2>/dev/null || true)"
+          HEALTH_URL="$(cat "${DEPLOY_DIR}/.backend_health_url" 2>/dev/null || true)"
+          TMP_DIR="$(mktemp -d)"
+          BACKUP_SUFFIX="$(date +%Y%m%d%H%M%S)"
+
+          cleanup() {
+            rm -rf "${TMP_DIR}"
+          }
+          trap cleanup EXIT
+
+          mkdir -p "${DEPLOY_DIR}"
+          tar -xzf "${DEPLOY_DIR}/${PACKAGE_NAME}" -C "${TMP_DIR}"
+          test -f "${TMP_DIR}/${JAR_NAME}"
+
+          if [ -f "${TMP_DIR}/.env.production" ]; then
+            install -m 600 "${TMP_DIR}/.env.production" "${DEPLOY_DIR}/.env.production"
+          elif [ ! -f "${DEPLOY_DIR}/.env.production" ]; then
+            echo "Warning: ${DEPLOY_DIR}/.env.production does not exist. Add BACKEND_ENV secret or create it on the server."
           fi
 
-          upsert_env "WX_PAY_ENABLED" "true"
-          upsert_env "WX_PAY_MOCK_ENABLED" "false"
-          upsert_env "WX_PAY_MCH_ID" "${WX_PAY_MCH_ID:-}"
-          upsert_env "WX_PAY_APIV3" "${WX_PAY_APIV3:-}"
-          upsert_env "WX_PAY_NOTIFY" "${WX_PAY_NOTIFY:-}"
-          upsert_env "WX_PAY_PRIVATE_KEY" "${PRIVATE_KEY_PATH}"
-          upsert_env "WX_PAY_CERT_SERIAL" "${WX_PAY_CERT_SERIAL:-}"
-          if [ -n "${WX_PAY_PUBLIC_KEY_ID:-}" ] || [ -n "${WX_PAY_PUBLIC_KEY_B64:-}" ]; then
-            upsert_env "WX_PAY_PUBLIC_KEY" "${PUBLIC_KEY_PATH}"
-            upsert_env "WX_PAY_PUBLIC_KEY_ID" "${WX_PAY_PUBLIC_KEY_ID:-}"
+          if [ -d "${TMP_DIR}/certs" ]; then
+            mkdir -p "${DEPLOY_DIR}/certs"
+            cp -f "${TMP_DIR}"/certs/* "${DEPLOY_DIR}/certs/" 2>/dev/null || true
+            chmod 600 "${DEPLOY_DIR}"/certs/* 2>/dev/null || true
           fi
-          upsert_env "APP_ENV" "production"
-          upsert_env "SERVER_PORT" "8080"
-          upsert_env "DB_HOST" "localhost"
-          upsert_env "DB_NAME" "${DB_NAME:-ha}"
-          upsert_env "DB_USER" "${DB_USER:-}"
-          upsert_env "DB_PASSWORD" "${DB_PASSWORD:-}"
-          upsert_env "TOKEN_SECRET" "${TOKEN_SECRET:-}"
-          upsert_env "CORS_ALLOWED_ORIGINS" "https://ht.diaoyuus.cn,https://www.diaoyuus.cn"
-          upsert_env "SWAGGER_ENABLED" "false"
-          upsert_env "DEMO_ENABLED" "false"
-          upsert_env "WX_MOCK_ENABLED" "false"
-          upsert_env "WX_APPID" "${WX_APPID:-}"
-          upsert_env "WX_SECRET" "${WX_SECRET:-}"
 
-          cd "${RELEASE_DIR}"
-          mvn -B -DskipTests clean package
-          cp "ruoyi-admin/target/${JAR_NAME}" "${DEPLOY_DIR}/${JAR_NAME}"
-          if [ -f ry.sh ]; then
-            cp ry.sh "${DEPLOY_DIR}/ry.sh"
+          if [ -f "${DEPLOY_DIR}/${JAR_NAME}" ]; then
+            cp "${DEPLOY_DIR}/${JAR_NAME}" "${DEPLOY_DIR}/${JAR_NAME}.${BACKUP_SUFFIX}.bak"
           fi
+
+          install -m 644 "${TMP_DIR}/${JAR_NAME}" "${DEPLOY_DIR}/${JAR_NAME}"
+          install -m 755 "${TMP_DIR}/ry.sh" "${DEPLOY_DIR}/ry.sh"
+          rm -f "${DEPLOY_DIR}/${PACKAGE_NAME}"
+          rm -f "${DEPLOY_DIR}/.backend_service" "${DEPLOY_DIR}/.backend_health_url"
+
           cd "${DEPLOY_DIR}"
-          ls -lh "${JAR_NAME}"
 
-          if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${SERVICE_NAME}.service" --no-legend | grep -q "${SERVICE_NAME}.service"; then
-            systemctl restart "${SERVICE_NAME}.service"
-            systemctl status "${SERVICE_NAME}.service" --no-pager -l
-          elif [ -f ry.sh ]; then
-            chmod +x ry.sh
+          run_systemctl() {
+            if [ "$(id -u)" -eq 0 ]; then
+              systemctl "$@"
+            else
+              sudo -n systemctl "$@"
+            fi
+          }
+
+          if [ -n "${SERVICE_NAME}" ] && command -v systemctl >/dev/null 2>&1 && run_systemctl list-unit-files "${SERVICE_NAME}.service" --no-legend | grep -q "${SERVICE_NAME}.service"; then
+            run_systemctl restart "${SERVICE_NAME}.service"
+            run_systemctl status "${SERVICE_NAME}.service" --no-pager -l || true
+          else
+            if [ -n "${SERVICE_NAME}" ]; then
+              echo "Systemd service ${SERVICE_NAME}.service was not found or cannot be controlled; falling back to ry.sh."
+            fi
             ./ry.sh restart
             ./ry.sh status
-          else
-            echo "Jar uploaded to ${DEPLOY_DIR}/dy.jar."
-            echo "Systemd service ${SERVICE_NAME}.service and ry.sh were not found. Restart the backend manually or add BACKEND_SERVICE secret."
           fi
 
-          sleep 15
-          if [ -f ry.sh ]; then
-            ./ry.sh status
+          if [ -z "${HEALTH_URL}" ]; then
+            SERVER_PORT=""
+            if [ -f .env.production ]; then
+              SERVER_PORT="$(grep -E '^SERVER_PORT=' .env.production | tail -n 1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '[:space:]' || true)"
+            fi
+            HEALTH_URL="http://127.0.0.1:${SERVER_PORT:-8080}/app/venue/default"
           fi
-          if ! curl -fsS --max-time 15 "http://127.0.0.1:${SERVER_PORT:-8080}/app/venue/default" >/tmp/fishing-health.json; then
-            echo "Backend health check failed. Last application logs:"
-            tail -n 200 "${DEPLOY_DIR}/logs/${JAR_NAME}.log" || true
+
+          if command -v curl >/dev/null 2>&1; then
+            for i in $(seq 1 20); do
+              if curl -fsS --max-time 5 "${HEALTH_URL}" >/tmp/fishing-health.json; then
+                echo "Backend health check passed: ${HEALTH_URL}"
+                head -c 500 /tmp/fishing-health.json || true
+                echo
+                exit 0
+              fi
+              sleep 3
+            done
+
+            echo "Backend health check failed: ${HEALTH_URL}"
+            tail -n 200 "${DEPLOY_DIR}/logs/${JAR_NAME}.log" 2>/dev/null || true
+            if [ -n "${SERVICE_NAME}" ] && command -v journalctl >/dev/null 2>&1; then
+              journalctl -u "${SERVICE_NAME}.service" -n 100 --no-pager 2>/dev/null || true
+            fi
             exit 1
           fi
-          MYSQL_BIN="$(command -v mysql || true)"
-          if [ -z "${MYSQL_BIN}" ] && [ -x /www/server/mysql/bin/mysql ]; then
-            MYSQL_BIN=/www/server/mysql/bin/mysql
-          fi
-          if [ -n "${MYSQL_BIN}" ] && [ -n "${DB_USER:-}" ] && [ -n "${DB_PASSWORD:-}" ]; then
-            MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_BIN}" --default-character-set=utf8mb4 -h 127.0.0.1 -P 3306 -u "${DB_USER}" "${DB_NAME:-ha}" -e "
-              INSERT INTO fish_qrcode (venue_id, qr_type, scene_value, remark, status, create_by, create_time)
-              SELECT 1, 'start', 'action=start&venueId=1', '默认入场码', '0', 'admin', NOW()
-              WHERE NOT EXISTS (SELECT 1 FROM fish_qrcode WHERE venue_id = 1 AND qr_type = 'start');
-              INSERT INTO fish_qrcode (venue_id, qr_type, scene_value, remark, status, create_by, create_time)
-              SELECT 1, 'end', 'action=end&venueId=1', '默认离场码', '0', 'admin', NOW()
-              WHERE NOT EXISTS (SELECT 1 FROM fish_qrcode WHERE venue_id = 1 AND qr_type = 'end');
-            "
-          fi
-          echo "Backend health check passed:"
-          head -c 500 /tmp/fishing-health.json
-          echo
 
-          PY_BIN="$(command -v python3 || command -v python || true)"
-          if [ -n "${PY_BIN}" ]; then
-            SERVER_PORT="${SERVER_PORT:-8080}" "${PY_BIN}" - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          server_port = os.environ.get("SERVER_PORT", "8080")
-          roots = [
-              Path("/www/server/panel/vhost/nginx"),
-              Path("/www/server/nginx/conf/vhost"),
-              Path("/etc/nginx/conf.d"),
-              Path("/www/server/nginx/conf"),
-          ]
-          pattern = re.compile(r"(proxy_pass\s+http://(?:127\.0\.0\.1|localhost):)(\d+)(/?)\s*;", re.I)
-          changed = []
-          seen = set()
-          for root in roots:
-              if not root.exists():
-                  continue
-              for path in root.rglob("*.conf"):
-                  if path in seen:
-                      continue
-                  seen.add(path)
-                  try:
-                      text = path.read_text(encoding="utf-8")
-                  except UnicodeDecodeError:
-                      text = path.read_text(encoding="latin-1")
-                  if "prod-api" not in text:
-                      continue
-                  updated = pattern.sub(lambda m: m.group(1) + server_port + m.group(3) + ";", text)
-                  if updated != text:
-                      path.write_text(updated, encoding="utf-8")
-                      changed.append(str(path))
-                  else:
-                      print("nginx_prod_api_found=" + str(path))
-          if changed:
-              print("nginx_proxy_updated=" + ",".join(changed))
-          PY
-          fi
-
-          if command -v nginx >/dev/null 2>&1; then
-            nginx -t
-            nginx -s reload
-          elif [ -x /www/server/nginx/sbin/nginx ]; then
-            /www/server/nginx/sbin/nginx -t
-            /www/server/nginx/sbin/nginx -s reload
-          elif command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files nginx.service --no-legend | grep -q nginx.service; then
-            systemctl reload nginx.service
-          fi
+          echo "curl is not installed on the server; skipped HTTP health check."
           EOF
