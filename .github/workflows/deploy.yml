@@ -29,12 +29,15 @@ jobs:
       - name: Package source
         run: |
           set -euo pipefail
+          SOURCE_ARCHIVE_PATH="/tmp/${SOURCE_ARCHIVE}"
+          rm -f "${SOURCE_ARCHIVE_PATH}" "${SOURCE_ARCHIVE}"
           tar \
             --exclude='.git' \
             --exclude='*/target' \
             --exclude='*/target/*' \
             --exclude='*.log' \
-            -czf "${SOURCE_ARCHIVE}" .
+            -czf "${SOURCE_ARCHIVE_PATH}" .
+          mv "${SOURCE_ARCHIVE_PATH}" "${SOURCE_ARCHIVE}"
           ls -lh "${SOURCE_ARCHIVE}"
 
       - name: Install SSH helper
