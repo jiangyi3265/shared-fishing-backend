@@ -137,6 +137,7 @@ jobs:
           rm -f "${DEPLOY_DIR}/${SOURCE_ARCHIVE}"
 
           if [ -s "${DEPLOY_DIR}/.backend_env" ]; then
+            sed -i 's/\r$//' "${DEPLOY_DIR}/.backend_env"
             install -m 600 "${DEPLOY_DIR}/.backend_env" "${DEPLOY_DIR}/.env.production"
           elif [ ! -f "${DEPLOY_DIR}/.env.production" ]; then
             echo "Warning: ${DEPLOY_DIR}/.env.production does not exist. Add BACKEND_ENV secret or create it on the server."
