@@ -14,8 +14,9 @@ concurrency:
 
 env:
   DEPLOY_DIR: /www/wwwroot/dyjava
+  SOURCE_ROOT: /www/wwwroot/dyjava-source
   JAR_NAME: dy.jar
-  PACKAGE_NAME: backend-deploy.tar.gz
+  SOURCE_ARCHIVE: backend-source.tar.gz
 
 jobs:
   deploy:
@@ -25,125 +26,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 8
-          cache: maven
-
-      - name: Build
-        run: mvn -B -DskipTests clean package
-
-      - name: Package deploy files
-        env:
-          BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
-          SERVER_PORT: ${{ secrets.SERVER_PORT }}
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_PORT: ${{ secrets.DB_PORT }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          REDIS_HOST: ${{ secrets.REDIS_HOST }}
-          REDIS_PORT: ${{ secrets.REDIS_PORT }}
-          REDIS_DATABASE: ${{ secrets.REDIS_DATABASE }}
-          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
-          TOKEN_SECRET: ${{ secrets.TOKEN_SECRET }}
-          CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
-          DRUID_STAT_USER: ${{ secrets.DRUID_STAT_USER }}
-          DRUID_STAT_PASSWORD: ${{ secrets.DRUID_STAT_PASSWORD }}
-          WX_APPID: ${{ secrets.WX_APPID }}
-          WX_SECRET: ${{ secrets.WX_SECRET }}
-          WX_PAY_MCH_ID: ${{ secrets.WX_PAY_MCH_ID }}
-          WX_PAY_APIV3: ${{ secrets.WX_PAY_APIV3 }}
-          WX_PAY_NOTIFY: ${{ secrets.WX_PAY_NOTIFY }}
-          WX_PAY_CERT_SERIAL: ${{ secrets.WX_PAY_CERT_SERIAL }}
-          WX_PAY_PUBLIC_KEY_ID: ${{ secrets.WX_PAY_PUBLIC_KEY_ID }}
-          WEATHER_QWEATHER_KEY: ${{ secrets.WEATHER_QWEATHER_KEY }}
-          WX_PAY_PRIVATE_KEY_B64: ${{ secrets.WX_PAY_PRIVATE_KEY_B64 }}
-          WX_PAY_PUBLIC_KEY_B64: ${{ secrets.WX_PAY_PUBLIC_KEY_B64 }}
+      - name: Package source
         run: |
           set -euo pipefail
-
-          test -f "ruoyi-admin/target/${JAR_NAME}"
-          rm -rf deploy-package "${PACKAGE_NAME}"
-          mkdir -p deploy-package
-
-          cp "ruoyi-admin/target/${JAR_NAME}" "deploy-package/${JAR_NAME}"
-          cp ry.sh deploy-package/ry.sh
-
-          if [ -n "${BACKEND_ENV:-}" ]; then
-            printf '%s\n' "${BACKEND_ENV}" > deploy-package/.env.production
-          elif [ -n "${DB_USER:-}" ] || [ -n "${DB_PASSWORD:-}" ] || [ -n "${TOKEN_SECRET:-}" ] || [ -n "${WX_APPID:-}" ] || [ -n "${WX_SECRET:-}" ]; then
-            write_env() {
-              key="$1"
-              value="$2"
-              [ -n "${value}" ] || return 0
-              printf '%s=%s\n' "${key}" "${value}" >> deploy-package/.env.production
-            }
-
-            write_env APP_ENV production
-            write_env SERVER_PORT "${SERVER_PORT:-8080}"
-            write_env DB_HOST "${DB_HOST:-localhost}"
-            write_env DB_PORT "${DB_PORT:-3306}"
-            write_env DB_NAME "${DB_NAME:-ha}"
-            write_env DB_USER "${DB_USER:-}"
-            write_env DB_PASSWORD "${DB_PASSWORD:-}"
-            write_env REDIS_HOST "${REDIS_HOST:-127.0.0.1}"
-            write_env REDIS_PORT "${REDIS_PORT:-6379}"
-            write_env REDIS_DATABASE "${REDIS_DATABASE:-0}"
-            write_env REDIS_PASSWORD "${REDIS_PASSWORD:-}"
-            write_env TOKEN_SECRET "${TOKEN_SECRET:-}"
-            write_env CORS_ALLOWED_ORIGINS "${CORS_ALLOWED_ORIGINS:-https://ht.diaoyuus.cn,https://www.diaoyuus.cn}"
-            write_env SWAGGER_ENABLED false
-            write_env DRUID_STAT_ENABLED false
-            write_env DRUID_STAT_USER "${DRUID_STAT_USER:-ruoyi}"
-            write_env DRUID_STAT_PASSWORD "${DRUID_STAT_PASSWORD:-}"
-            write_env DEMO_ENABLED false
-            write_env WX_APPID "${WX_APPID:-}"
-            write_env WX_SECRET "${WX_SECRET:-}"
-            write_env WX_MOCK_ENABLED false
-            write_env WX_TOKEN_EXPIRE_DAYS 30
-            write_env WX_PAY_ENABLED true
-            write_env WX_PAY_MOCK_ENABLED false
-            write_env WX_PAY_MCH_ID "${WX_PAY_MCH_ID:-}"
-            write_env WX_PAY_APIV3 "${WX_PAY_APIV3:-}"
-            write_env WX_PAY_NOTIFY "${WX_PAY_NOTIFY:-}"
-            write_env WX_PAY_PRIVATE_KEY "${DEPLOY_DIR}/certs/apiclient_key.pem"
-            write_env WX_PAY_CERT_SERIAL "${WX_PAY_CERT_SERIAL:-}"
-            write_env WX_PAY_PUBLIC_KEY "${DEPLOY_DIR}/certs/wechatpay_public_key.pem"
-            write_env WX_PAY_PUBLIC_KEY_ID "${WX_PAY_PUBLIC_KEY_ID:-}"
-            write_env WEATHER_QWEATHER_KEY "${WEATHER_QWEATHER_KEY:-}"
-          else
-            echo "No backend environment secrets configured; keeping the server's existing .env.production."
-          fi
-
-          if [ -n "${WX_PAY_PRIVATE_KEY_B64:-}" ] || [ -n "${WX_PAY_PUBLIC_KEY_B64:-}" ]; then
-            mkdir -p deploy-package/certs
-          fi
-          if [ -n "${WX_PAY_PRIVATE_KEY_B64:-}" ]; then
-            printf '%s' "${WX_PAY_PRIVATE_KEY_B64}" | base64 --decode > deploy-package/certs/apiclient_key.pem
-          fi
-          if [ -n "${WX_PAY_PUBLIC_KEY_B64:-}" ]; then
-            printf '%s' "${WX_PAY_PUBLIC_KEY_B64}" | base64 --decode > deploy-package/certs/wechatpay_public_key.pem
-          fi
-
-          tar -czf "${PACKAGE_NAME}" -C deploy-package .
-          ls -lh "${PACKAGE_NAME}"
+          tar \
+            --exclude='.git' \
+            --exclude='*/target' \
+            --exclude='*/target/*' \
+            --exclude='*.log' \
+            -czf "${SOURCE_ARCHIVE}" .
+          ls -lh "${SOURCE_ARCHIVE}"
 
       - name: Install SSH helper
         run: |
           sudo apt-get update
           sudo apt-get install -y sshpass
 
-      - name: Upload and restart
-        timeout-minutes: 30
+      - name: Upload source and deploy
+        timeout-minutes: 45
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
           BACKEND_SERVICE: ${{ secrets.BACKEND_SERVICE }}
           BACKEND_HEALTH_URL: ${{ secrets.BACKEND_HEALTH_URL }}
         run: |
@@ -188,52 +95,61 @@ jobs:
             fi
           }
 
-          remote_ssh "mkdir -p '${DEPLOY_DIR}'"
-          remote_scp "${PACKAGE_NAME}" "${DEPLOY_DIR}/${PACKAGE_NAME}"
+          remote_ssh "mkdir -p '${DEPLOY_DIR}' '${SOURCE_ROOT}'"
+          remote_scp "${SOURCE_ARCHIVE}" "${DEPLOY_DIR}/${SOURCE_ARCHIVE}"
+
+          if [ -n "${BACKEND_ENV:-}" ]; then
+            printf '%s\n' "${BACKEND_ENV}" > .backend_env
+            remote_scp .backend_env "${DEPLOY_DIR}/.backend_env"
+          else
+            remote_ssh "rm -f '${DEPLOY_DIR}/.backend_env'"
+          fi
+
           printf '%s' "${BACKEND_SERVICE:-}" > .backend_service
           printf '%s' "${BACKEND_HEALTH_URL:-}" > .backend_health_url
           remote_scp .backend_service "${DEPLOY_DIR}/.backend_service"
           remote_scp .backend_health_url "${DEPLOY_DIR}/.backend_health_url"
 
-          remote_ssh "bash -s" -- "${DEPLOY_DIR}" "${JAR_NAME}" "${PACKAGE_NAME}" <<'EOF'
+          remote_ssh "bash -s" -- "${DEPLOY_DIR}" "${SOURCE_ROOT}" "${JAR_NAME}" "${SOURCE_ARCHIVE}" "${GITHUB_SHA}" <<'EOF'
           set -euo pipefail
 
           DEPLOY_DIR="$1"
-          JAR_NAME="$2"
-          PACKAGE_NAME="$3"
+          SOURCE_ROOT="$2"
+          JAR_NAME="$3"
+          SOURCE_ARCHIVE="$4"
+          COMMIT_SHA="$5"
+          RELEASE_DIR="${SOURCE_ROOT}/${COMMIT_SHA}"
           SERVICE_NAME="$(cat "${DEPLOY_DIR}/.backend_service" 2>/dev/null || true)"
           HEALTH_URL="$(cat "${DEPLOY_DIR}/.backend_health_url" 2>/dev/null || true)"
-          TMP_DIR="$(mktemp -d)"
           BACKUP_SUFFIX="$(date +%Y%m%d%H%M%S)"
 
-          cleanup() {
-            rm -rf "${TMP_DIR}"
-          }
-          trap cleanup EXIT
+          case "${RELEASE_DIR}" in
+            "${SOURCE_ROOT}"/*) ;;
+            *) echo "Invalid release directory: ${RELEASE_DIR}"; exit 1 ;;
+          esac
 
-          mkdir -p "${DEPLOY_DIR}"
-          tar -xzf "${DEPLOY_DIR}/${PACKAGE_NAME}" -C "${TMP_DIR}"
-          test -f "${TMP_DIR}/${JAR_NAME}"
+          rm -rf "${RELEASE_DIR}"
+          mkdir -p "${DEPLOY_DIR}" "${SOURCE_ROOT}" "${RELEASE_DIR}"
+          tar -xzf "${DEPLOY_DIR}/${SOURCE_ARCHIVE}" -C "${RELEASE_DIR}"
+          rm -f "${DEPLOY_DIR}/${SOURCE_ARCHIVE}"
 
-          if [ -f "${TMP_DIR}/.env.production" ]; then
-            install -m 600 "${TMP_DIR}/.env.production" "${DEPLOY_DIR}/.env.production"
+          if [ -s "${DEPLOY_DIR}/.backend_env" ]; then
+            install -m 600 "${DEPLOY_DIR}/.backend_env" "${DEPLOY_DIR}/.env.production"
           elif [ ! -f "${DEPLOY_DIR}/.env.production" ]; then
             echo "Warning: ${DEPLOY_DIR}/.env.production does not exist. Add BACKEND_ENV secret or create it on the server."
           fi
+          rm -f "${DEPLOY_DIR}/.backend_env"
 
-          if [ -d "${TMP_DIR}/certs" ]; then
-            mkdir -p "${DEPLOY_DIR}/certs"
-            cp -f "${TMP_DIR}"/certs/* "${DEPLOY_DIR}/certs/" 2>/dev/null || true
-            chmod 600 "${DEPLOY_DIR}"/certs/* 2>/dev/null || true
-          fi
+          cd "${RELEASE_DIR}"
+          mvn -B -DskipTests clean package
+          test -f "ruoyi-admin/target/${JAR_NAME}"
 
           if [ -f "${DEPLOY_DIR}/${JAR_NAME}" ]; then
             cp "${DEPLOY_DIR}/${JAR_NAME}" "${DEPLOY_DIR}/${JAR_NAME}.${BACKUP_SUFFIX}.bak"
           fi
 
-          install -m 644 "${TMP_DIR}/${JAR_NAME}" "${DEPLOY_DIR}/${JAR_NAME}"
-          install -m 755 "${TMP_DIR}/ry.sh" "${DEPLOY_DIR}/ry.sh"
-          rm -f "${DEPLOY_DIR}/${PACKAGE_NAME}"
+          install -m 644 "ruoyi-admin/target/${JAR_NAME}" "${DEPLOY_DIR}/${JAR_NAME}"
+          install -m 755 ry.sh "${DEPLOY_DIR}/ry.sh"
           rm -f "${DEPLOY_DIR}/.backend_service" "${DEPLOY_DIR}/.backend_health_url"
 
           cd "${DEPLOY_DIR}"
