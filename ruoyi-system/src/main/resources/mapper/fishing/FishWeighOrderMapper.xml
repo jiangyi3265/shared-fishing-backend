@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishWeighOrderMapper">
+
+    <resultMap type="com.ruoyi.fishing.domain.FishWeighOrder" id="W">
+        <id     property="fishWeighId"  column="weigh_id"/>
+        <result property="weighNo"      column="weigh_no"/>
+        <result property="userId"       column="user_id"/>
+        <result property="venueId"      column="venue_id"/>
+        <result property="weightGrams"  column="weight_grams"/>
+        <result property="priceCents"   column="price_cents"/>
+        <result property="isMember"     column="is_member"/>
+        <result property="amountCents"  column="amount_cents"/>
+        <result property="status"       column="status"/>
+        <result property="payTradeNo"   column="pay_trade_no"/>
+        <result property="paidTime"     column="paid_time"/>
+        <result property="createTime"   column="create_time"/>
+        <result property="updateTime"   column="update_time"/>
+        <result property="nickname"     column="nickname"/>
+        <result property="venueName"    column="venue_name"/>
+    </resultMap>
+
+    <sql id="vo">
+        select o.weigh_id, o.weigh_no, o.user_id, o.venue_id, o.weight_grams,
+               o.price_cents, o.is_member, o.amount_cents, o.status,
+               o.pay_trade_no, o.paid_time, o.create_time, o.update_time,
+               u.nickname, v.name as venue_name
+        from fish_weigh_order o
+        left join fish_user u on o.user_id = u.user_id
+        left join fish_venue v on o.venue_id = v.venue_id
+    </sql>
+
+    <select id="selectById" resultMap="W">
+        <include refid="vo"/> where o.weigh_id = #{fishWeighId}
+    </select>
+
+    <select id="selectByWeighNo" resultMap="W">
+        <include refid="vo"/> where o.weigh_no = #{weighNo}
+    </select>
+
+    <select id="selectList" parameterType="com.ruoyi.fishing.domain.FishWeighOrder" resultMap="W">
+        <include refid="vo"/>
+        <where>
+            <if test="weighNo != null and weighNo != ''">AND o.weigh_no like concat('%', #{weighNo}, '%')</if>
+            <if test="userId != null">AND o.user_id = #{userId}</if>
+            <if test="venueId != null">AND o.venue_id = #{venueId}</if>
+            <if test="status != null">AND o.status = #{status}</if>
+            <if test="params.beginTime != null and params.beginTime != ''">AND o.create_time &gt;= #{params.beginTime}</if>
+            <if test="params.endTime != null and params.endTime != ''">AND o.create_time &lt;= #{params.endTime}</if>
+        </where>
+        order by o.weigh_id desc
+    </select>
+
+    <select id="selectByUser" resultMap="W">
+        <include refid="vo"/>
+        where o.user_id = #{userId}
+        order by o.weigh_id desc
+        limit 50
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishWeighOrder" useGeneratedKeys="true" keyProperty="fishWeighId">
+        insert into fish_weigh_order (weigh_no, user_id, venue_id, weight_grams, price_cents, is_member, amount_cents, status, create_time)
+        values (#{weighNo}, #{userId}, #{venueId}, #{weightGrams}, #{priceCents}, #{isMember}, #{amountCents}, #{status}, sysdate())
+    </insert>
+
+    <update id="update" parameterType="com.ruoyi.fishing.domain.FishWeighOrder">
+        update fish_weigh_order
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="status      != null">status = #{status},</if>
+            <if test="payTradeNo  != null">pay_trade_no = #{payTradeNo},</if>
+            <if test="paidTime    != null">paid_time = #{paidTime},</if>
+            update_time = sysdate()
+        </trim>
+        where weigh_id = #{fishWeighId}
+    </update>
+
+    <update id="updateStatusWithGuard">
+        update fish_weigh_order set status = #{newStatus}, update_time = sysdate()
+        where weigh_id = #{fishWeighId} and status = #{expectedStatus}
+    </update>
+</mapper>

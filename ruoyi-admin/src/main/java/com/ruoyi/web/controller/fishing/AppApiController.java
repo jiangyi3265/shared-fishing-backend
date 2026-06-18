@@ -16,6 +16,8 @@ import com.ruoyi.fishing.domain.FishRegistration;
 import com.ruoyi.fishing.domain.FishUser;
 import com.ruoyi.fishing.domain.FishUserCoupon;
 import com.ruoyi.fishing.domain.FishVenue;
+import com.ruoyi.fishing.domain.FishWeighOrder;
+import com.ruoyi.fishing.service.IFishWeighService;
 import com.ruoyi.fishing.mapper.FishQrcodeMapper;
 import com.ruoyi.fishing.service.AppTokenService;
 import com.ruoyi.fishing.service.IFishAdService;
@@ -93,6 +95,8 @@ public class AppApiController
     private IFishRentalService rentalService;
     @Autowired
     private IFishCompetitionService competitionService;
+    @Autowired
+    private IFishWeighService weighService;
     @Autowired
     private FishQrcodeMapper qrcodeMapper;
     @Autowired
@@ -310,6 +314,7 @@ public class AppApiController
             {
                 if (orderNo.startsWith("R")) balanceService.markRechargePaid(orderNo, tradeNo);
                 else if (orderNo.startsWith("M")) mallService.markPaid(orderNo, tradeNo);
+                else if (orderNo.startsWith("W")) weighService.markPaid(orderNo, tradeNo);
                 else if (orderNo.startsWith("A")) regService.pay(parseLong(orderNo.substring(1)));
                 else orderService.markPaid(orderNo, tradeNo);
             }
@@ -1077,5 +1082,125 @@ public class AppApiController
         String nickname = body.getOrDefault("nickname", "");
         String phone = body.getOrDefault("phone", "");
         return AjaxResult.success(competitionService.enter(compId, userId, nickname, phone));
+    }
+
+    // ===== 称鱼结算 =====
+
+    /** 鱼获单价（按钓场区分路人价/会员价，并返回当前用户是否会员） */
+    @Anonymous
+    @GetMapping("/fish-weigh/price")
+    public AjaxResult fishWeighPrice(@RequestParam(required = false) Long venueId)
+    {
+        Long resolvedVenueId = resolveDefaultVenueId(venueId);
+        int[] prices = weighService.getPrices(resolvedVenueId);
+        boolean isMember = false;
+        Long userId = currentUserId();
+        if (userId != null)
+        {
+            FishUser u = userService.selectFishUserByUserId(userId);
+            isMember = u != null && u.getMemberLevelId() != null;
+        }
+        Map<String, Object> data = new HashMap<>();
+        data.put("normalPricePerJin", prices[0]);
+        data.put("memberPricePerJin", prices[1]);
+        data.put("isMember", isMember);
+        return AjaxResult.success(data);
+    }
+
+    /** 提交称鱼：服务端按重量×单价重算金额 */
+    @Anonymous
+    @PostMapping("/fish-weigh/submit")
+    public AjaxResult fishWeighSubmit(@RequestBody Map<String, Object> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        Long bodyUserId = parseLong(body.get("userId"));
+        if (bodyUserId != null && !bodyUserId.equals(userId)) return unauthorized();
+
+        Integer weightGrams = null;
+        Object w = body.get("weightGrams");
+        if (w instanceof Number) weightGrams = ((Number) w).intValue();
+        else if (w != null) try { weightGrams = Integer.parseInt(String.valueOf(w)); } catch (Exception ignore) {}
+        if (weightGrams == null || weightGrams <= 0) return AjaxResult.error("请输入有效的鱼获重量");
+
+        Long venueId = resolveDefaultVenueId(parseLong(body.get("venueId")));
+        FishUser u = userService.selectFishUserByUserId(userId);
+        boolean isMember = u != null && u.getMemberLevelId() != null;
+
+        FishWeighOrder order = weighService.createOrder(userId, venueId, weightGrams, isMember);
+        return AjaxResult.success(order);
+    }
+
+    /** 称鱼支付（支持 useBalance 全额余额抵扣，否则走微信支付） */
+    @Anonymous
+    @PostMapping("/fish-weigh/pay")
+    public AjaxResult fishWeighPay(@RequestBody Map<String, Object> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        Long fishWeighId = parseLong(body.get("fishWeighId"));
+        if (fishWeighId == null) return AjaxResult.error("参数缺失");
+        boolean useBalance = Boolean.TRUE.equals(body.get("useBalance"))
+                || "true".equalsIgnoreCase(String.valueOf(body.get("useBalance")));
+
+        FishWeighOrder order = weighService.selectById(fishWeighId);
+        if (order == null) return AjaxResult.error("称鱼订单不存在");
+        if (!userId.equals(order.getUserId())) return unauthorized();
+        if (order.getStatus() != null && order.getStatus() == 1)
+        {
+            Map<String, Object> data = new HashMap<>();
+            data.put("order", order);
+            data.put("needWxPay", false);
+            return AjaxResult.success(data);
+        }
+
+        int amount = order.getAmountCents() == null ? 0 : order.getAmountCents();
+
+        if (useBalance)
+        {
+            FishWeighOrder paid = weighService.payByBalance(userId, fishWeighId);
+            Map<String, Object> data = new HashMap<>();
+            data.put("order", paid);
+            data.put("needWxPay", false);
+            return AjaxResult.success(data);
+        }
+
+        if (wxPayService.isEnabled())
+        {
+            FishUser user = userService.selectFishUserByUserId(userId);
+            if (user == null) return AjaxResult.error("用户不存在");
+            Map<String, Object> prepay = wxPayService.createPrepay(order.getWeighNo(), amount, user.getOpenid(),
+                    "共享钓场 · 称鱼结算 " + order.getWeighNo());
+            Map<String, Object> data = new HashMap<>();
+            data.put("order", order);
+            data.put("pay", prepay);
+            data.put("needWxPay", true);
+            return AjaxResult.success(data);
+        }
+
+        if (!wxPayService.isMockEnabled()) return AjaxResult.error("微信支付未配置");
+        FishWeighOrder paid = weighService.markPaid(order.getWeighNo(), "MOCK");
+        Map<String, Object> data = new HashMap<>();
+        data.put("order", paid);
+        data.put("needWxPay", false);
+        return AjaxResult.success(data);
+    }
+
+    /** 我的称鱼记录 */
+    @Anonymous
+    @GetMapping("/fish-weigh/my")
+    public AjaxResult fishWeighMy()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(weighService.selectByUser(userId));
+    }
+
+    /** 解析钓场ID：为空时取默认（第一个）钓场 */
+    private Long resolveDefaultVenueId(Long venueId)
+    {
+        if (venueId != null) return venueId;
+        List<FishVenue> venues = venueService.selectFishVenueList(new FishVenue());
+        return venues.isEmpty() ? null : venues.get(0).getVenueId();
     }
 }

@@ -377,6 +377,8 @@ CREATE TABLE `fish_venue` (
   `notice`         VARCHAR(500) DEFAULT ''              COMMENT '营业说明',
   `phone`          VARCHAR(30)  DEFAULT ''              COMMENT '联系方式',
   `rule_id`        BIGINT(20)   DEFAULT NULL            COMMENT '默认计费规则ID',
+  `fish_price_cents`        INT(11) DEFAULT NULL        COMMENT '路人鱼获单价(分/斤)',
+  `fish_member_price_cents` INT(11) DEFAULT NULL        COMMENT '会员鱼获单价(分/斤)',
   `status`         CHAR(1)      DEFAULT '0'             COMMENT '状态（0正常 1停用）',
   `del_flag`       CHAR(1)      DEFAULT '0'             COMMENT '删除标志（0代表存在 2代表删除）',
   `create_by`      VARCHAR(64)  DEFAULT ''              COMMENT '创建者',
@@ -918,6 +920,29 @@ create table fish_recharge_order (
   key idx_user (user_id),
   key idx_status (status)
 ) engine=innodb default charset=utf8mb4 comment '充值订单';
+
+-- 称鱼结算订单
+drop table if exists `fish_weigh_order`;
+create table fish_weigh_order (
+  weigh_id      bigint(20)   not null auto_increment,
+  weigh_no      varchar(40)  not null comment '称鱼单号(微信outTradeNo,前缀W)',
+  user_id       bigint(20)   not null,
+  venue_id      bigint(20)   null comment '钓场ID',
+  weight_grams  int(11)      not null comment '鱼获重量(克)',
+  price_cents   int(11)      not null comment '结算单价(分/斤)快照',
+  is_member     tinyint(2)   not null default 0 comment '是否会员价 0否 1是',
+  amount_cents  int(11)      not null comment '应付金额(分)',
+  status        tinyint(2)   not null default 0 comment '0待支付 1已完成 2已取消',
+  pay_trade_no  varchar(64)  default '',
+  paid_time     datetime     null,
+  create_time   datetime     default current_timestamp,
+  update_time   datetime     null,
+  primary key (weigh_id),
+  unique key uk_weigh_no (weigh_no),
+  key idx_user (user_id),
+  key idx_venue (venue_id),
+  key idx_status (status)
+) engine=innodb default charset=utf8mb4 comment '称鱼结算订单';
 
 -- 示例套餐
 insert into fish_recharge_plan (title, amount_cents, bonus_cents, badge, sort) values

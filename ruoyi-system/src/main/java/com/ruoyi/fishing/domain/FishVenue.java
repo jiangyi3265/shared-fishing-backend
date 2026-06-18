@@ -27,6 +27,14 @@ public class FishVenue extends BaseEntity
 
     private Long ruleId;
 
+    /** 路人鱼获单价(分/斤) */
+    @Excel(name = "路人鱼获单价(分/斤)")
+    private Integer fishPriceCents;
+
+    /** 会员鱼获单价(分/斤) */
+    @Excel(name = "会员鱼获单价(分/斤)")
+    private Integer fishMemberPriceCents;
+
     @Excel(name = "状态", readConverterExp = "0=正常,1=停用")
     private String status;
 
@@ -44,6 +52,10 @@ public class FishVenue extends BaseEntity
     public void setPhone(String phone) { this.phone = phone; }
     public Long getRuleId() { return ruleId; }
     public void setRuleId(Long ruleId) { this.ruleId = ruleId; }
+    public Integer getFishPriceCents() { return fishPriceCents; }
+    public void setFishPriceCents(Integer fishPriceCents) { this.fishPriceCents = fishPriceCents; }
+    public Integer getFishMemberPriceCents() { return fishMemberPriceCents; }
+    public void setFishMemberPriceCents(Integer fishMemberPriceCents) { this.fishMemberPriceCents = fishMemberPriceCents; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public String getDelFlag() { return delFlag; }

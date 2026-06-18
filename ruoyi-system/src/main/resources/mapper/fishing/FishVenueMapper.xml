@@ -9,6 +9,8 @@
         <result property="notice"      column="notice"/>
         <result property="phone"       column="phone"/>
         <result property="ruleId"      column="rule_id"/>
+        <result property="fishPriceCents"       column="fish_price_cents"/>
+        <result property="fishMemberPriceCents" column="fish_member_price_cents"/>
         <result property="status"      column="status"/>
         <result property="delFlag"     column="del_flag"/>
         <result property="createBy"    column="create_by"/>
@@ -19,7 +21,8 @@
     </resultMap>
 
     <sql id="selectFishVenueVo">
-        select venue_id, name, address, notice, phone, rule_id, status, del_flag,
+        select venue_id, name, address, notice, phone, rule_id,
+               fish_price_cents, fish_member_price_cents, status, del_flag,
                create_by, create_time, update_by, update_time, remark
         from fish_venue
     </sql>
@@ -48,6 +51,8 @@
             <if test="notice != null">notice,</if>
             <if test="phone != null">phone,</if>
             <if test="ruleId != null">rule_id,</if>
+            <if test="fishPriceCents != null">fish_price_cents,</if>
+            <if test="fishMemberPriceCents != null">fish_member_price_cents,</if>
             <if test="status != null">status,</if>
             <if test="createBy != null">create_by,</if>
             <if test="remark != null">remark,</if>
@@ -59,6 +64,8 @@
             <if test="notice != null">#{notice},</if>
             <if test="phone != null">#{phone},</if>
             <if test="ruleId != null">#{ruleId},</if>
+            <if test="fishPriceCents != null">#{fishPriceCents},</if>
+            <if test="fishMemberPriceCents != null">#{fishMemberPriceCents},</if>
             <if test="status != null">#{status},</if>
             <if test="createBy != null">#{createBy},</if>
             <if test="remark != null">#{remark},</if>
@@ -74,6 +81,8 @@
             <if test="notice != null">notice = #{notice},</if>
             <if test="phone != null">phone = #{phone},</if>
             <if test="ruleId != null">rule_id = #{ruleId},</if>
+            <if test="fishPriceCents != null">fish_price_cents = #{fishPriceCents},</if>
+            <if test="fishMemberPriceCents != null">fish_member_price_cents = #{fishMemberPriceCents},</if>
             <if test="status != null">status = #{status},</if>
             <if test="updateBy != null">update_by = #{updateBy},</if>
             <if test="remark != null">remark = #{remark},</if>
