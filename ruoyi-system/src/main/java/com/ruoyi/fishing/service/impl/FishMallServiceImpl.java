@@ -31,6 +31,7 @@ public class FishMallServiceImpl implements IFishMallService
     @Autowired private FishMallOrderMapper orderMapper;
     @Autowired private IFishBalanceService balanceService;
     @Autowired private IFishUserService userService;
+    @Autowired private com.ruoyi.fishing.service.IFishPointsService pointsService;
 
     // ===== 分类 =====
     @Override public List<FishMallCategory> listCategory(FishMallCategory q) { return catMapper.selectList(q); }
@@ -53,12 +54,19 @@ public class FishMallServiceImpl implements IFishMallService
     @Transactional
     public FishMallOrder submitOrder(Long userId, List<Map<String, Object>> items, String remark, Long venueId)
     {
-        return submitOrder(userId, items, remark, venueId, false);
+        return submitOrder(userId, items, remark, venueId, false, 0);
     }
 
     @Override
     @Transactional
     public FishMallOrder submitOrder(Long userId, List<Map<String, Object>> items, String remark, Long venueId, boolean useBalance)
+    {
+        return submitOrder(userId, items, remark, venueId, useBalance, 0);
+    }
+
+    @Override
+    @Transactional
+    public FishMallOrder submitOrder(Long userId, List<Map<String, Object>> items, String remark, Long venueId, boolean useBalance, int pointsToUse)
     {
         userService.assertNotBlacklisted(userId);
         if (items == null || items.isEmpty()) throw new ServiceException("商品清单为空");
@@ -90,15 +98,35 @@ public class FishMallServiceImpl implements IFishMallService
             total += g.getPriceCents() * qty;
         }
 
-        // 余额抵扣预计算
+        // 积分抵现预计算（优先级最高：先抵积分；100 积分 = 1 元，即 1 积分 = 1 分，可全额抵）
+        int pointsUsed = 0;
+        int pointsDeductCents = 0;
+        if (pointsToUse > 0 && total > 0)
+        {
+            try
+            {
+                int userPoints = pointsService.getUserPoints(userId);
+                int maxUsable = Math.min(userPoints, total); // 1 积分 = 1 分，最多抵到订单总额
+                pointsUsed = Math.min(pointsToUse, maxUsable);
+                if (pointsUsed < 0) pointsUsed = 0;
+                pointsDeductCents = pointsUsed; // 1 积分 = 1 分
+            }
+            catch (Exception e)
+            {
+                log.warn("读取用户积分失败 userId={} 跳过积分抵扣: {}", userId, e.getMessage());
+            }
+        }
+        int afterPoints = total - pointsDeductCents;
+
+        // 余额抵扣预计算（积分之后，对剩余金额抵扣）
         int balanceCents = 0;
-        if (useBalance && total > 0)
+        if (useBalance && afterPoints > 0)
         {
             try
             {
                 com.ruoyi.fishing.domain.FishUserBalance bal = balanceService.getBalance(userId);
                 int avail = bal == null || bal.getBalanceCents() == null ? 0 : bal.getBalanceCents();
-                balanceCents = Math.min(avail, total);
+                balanceCents = Math.min(avail, afterPoints);
             }
             catch (Exception e)
             {
@@ -114,6 +142,8 @@ public class FishMallServiceImpl implements IFishMallService
         order.setTotalCents(total);
         order.setAmountPaid(0);
         order.setBalanceCents(balanceCents);
+        order.setPointsUsed(pointsUsed);
+        order.setPointsDeductCents(pointsDeductCents);
         order.setStatus(0);
         order.setRemark2(remark == null ? "" : remark);
         order.setRedeemCode("");
@@ -142,6 +172,14 @@ public class FishMallServiceImpl implements IFishMallService
 
         int total = order.getTotalCents() == null ? 0 : order.getTotalCents();
         int balance = order.getBalanceCents() == null ? 0 : order.getBalanceCents();
+        int points = order.getPointsUsed() == null ? 0 : order.getPointsUsed();
+        int pointsCents = order.getPointsDeductCents() == null ? 0 : order.getPointsDeductCents();
+        // 真正扣减积分（如有）
+        if (points > 0)
+        {
+            pointsService.addPoints(order.getUserId(), -points, "mall",
+                    order.getMallOrderNo(), "商城订单积分抵扣");
+        }
         // 真正扣减余额（如有）
         if (balance > 0)
         {
@@ -150,8 +188,10 @@ public class FishMallServiceImpl implements IFishMallService
         }
         order.setStatus(1);
         order.setPaidTime(new Date());
-        order.setAmountPaid(Math.max(0, total - balance));
+        order.setAmountPaid(Math.max(0, total - pointsCents - balance));
         order.setBalanceCents(balance);
+        order.setPointsUsed(points);
+        order.setPointsDeductCents(pointsCents);
         order.setPayTradeNo(tradeNo == null ? "" : tradeNo);
         orderMapper.update(order);
         return order;

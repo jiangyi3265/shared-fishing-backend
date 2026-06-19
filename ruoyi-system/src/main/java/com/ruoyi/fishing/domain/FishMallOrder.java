@@ -34,6 +34,12 @@ public class FishMallOrder extends BaseEntity
     /** 使用余额抵扣(分) */
     private Integer balanceCents;
 
+    /** 使用积分数（100 积分 = 1 元，1 积分 = 1 分） */
+    private Integer pointsUsed;
+
+    /** 积分抵扣金额(分) */
+    private Integer pointsDeductCents;
+
     @Excel(name = "状态", readConverterExp = "0=待支付,1=可领取,2=已领取,3=已取消")
     private Integer status;
 
@@ -65,6 +71,10 @@ public class FishMallOrder extends BaseEntity
     public void setAmountPaid(Integer amountPaid) { this.amountPaid = amountPaid; }
     public Integer getBalanceCents() { return balanceCents; }
     public void setBalanceCents(Integer balanceCents) { this.balanceCents = balanceCents; }
+    public Integer getPointsUsed() { return pointsUsed; }
+    public void setPointsUsed(Integer pointsUsed) { this.pointsUsed = pointsUsed; }
+    public Integer getPointsDeductCents() { return pointsDeductCents; }
+    public void setPointsDeductCents(Integer pointsDeductCents) { this.pointsDeductCents = pointsDeductCents; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
     public String getRemark2() { return remark2; }

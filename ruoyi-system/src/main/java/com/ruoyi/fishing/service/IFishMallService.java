@@ -42,6 +42,14 @@ public interface IFishMallService
      */
     FishMallOrder submitOrder(Long userId, List<Map<String, Object>> items, String remark, Long venueId, boolean useBalance);
 
+    /**
+     * 提交订单（支持积分抵现 + 余额抵扣）。
+     * 优先级：先抵积分（100 积分 = 1 元，1 积分 = 1 分，可全额抵），再抵余额，剩余微信支付。
+     * pointsToUse 为希望使用的积分数，服务端按「不超过用户积分余额、不超过订单金额」封顶。
+     * 积分与余额在提交时以 points_used / balance_cents 记录（冻结语义），正式扣减发生在 markPaid。
+     */
+    FishMallOrder submitOrder(Long userId, List<Map<String, Object>> items, String remark, Long venueId, boolean useBalance, int pointsToUse);
+
     /** 标记已支付：0 → 1 可领取 */
     FishMallOrder markPaid(String orderNo, String tradeNo);
 

@@ -555,14 +555,23 @@ public class AppApiController
         Long venueId = parseLong(body.get("venueId"));
         boolean useBalance = Boolean.TRUE.equals(body.get("useBalance"))
                 || "true".equalsIgnoreCase(String.valueOf(body.get("useBalance")));
+        int pointsToUse = 0;
+        Object pointsRaw = body.get("pointsToUse");
+        if (pointsRaw != null)
+        {
+            try { pointsToUse = (int) Math.round(Double.parseDouble(String.valueOf(pointsRaw))); }
+            catch (Exception ignore) { }
+        }
+        if (pointsToUse < 0) pointsToUse = 0;
 
-        FishMallOrder order = mallService.submitOrder(userId, items, remark, venueId, useBalance);
+        FishMallOrder order = mallService.submitOrder(userId, items, remark, venueId, useBalance, pointsToUse);
         Map<String, Object> data = new HashMap<>();
         data.put("order", order);
 
         int total = order.getTotalCents() == null ? 0 : order.getTotalCents();
         int balance = order.getBalanceCents() == null ? 0 : order.getBalanceCents();
-        int wxAmount = Math.max(0, total - balance);
+        int pointsCents = order.getPointsDeductCents() == null ? 0 : order.getPointsDeductCents();
+        int wxAmount = Math.max(0, total - pointsCents - balance);
 
         // 全额免付（0 元 或 余额全覆盖）
         if (wxAmount <= 0)

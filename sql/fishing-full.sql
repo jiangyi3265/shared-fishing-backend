@@ -986,6 +986,12 @@ alter table fish_order
 alter table fish_mall_order
   add column balance_cents int(11) not null default 0 comment '使用余额抵扣(分)' after amount_paid;
 
+-- 积分抵现：给商城订单加积分使用字段（100 积分 = 1 元，1 积分 = 1 分，可全额抵）
+alter table fish_mall_order
+  add column points_used int(11) not null default 0 comment '使用积分数' after balance_cents;
+alter table fish_mall_order
+  add column points_deduct_cents int(11) not null default 0 comment '积分抵扣金额(分)' after points_used;
+
 -- END SOURCE: fishing-balance-deduct.sql
 
 -- ============================================================

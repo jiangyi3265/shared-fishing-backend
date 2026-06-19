@@ -10,6 +10,8 @@
         <result property="totalCents"   column="total_cents"/>
         <result property="amountPaid"   column="amount_paid"/>
         <result property="balanceCents" column="balance_cents"/>
+        <result property="pointsUsed"   column="points_used"/>
+        <result property="pointsDeductCents" column="points_deduct_cents"/>
         <result property="status"       column="status"/>
         <result property="remark2"      column="remark"/>
         <result property="redeemCode"   column="redeem_code"/>
@@ -37,7 +39,7 @@
 
     <sql id="vo">
         select o.mall_order_id, o.mall_order_no, o.user_id, o.venue_id, o.total_cents, o.amount_paid,
-               o.balance_cents,
+               o.balance_cents, o.points_used, o.points_deduct_cents,
                o.status, o.remark, o.redeem_code, o.pay_trade_no, o.paid_time, o.redeemed_time, o.redeemed_by,
                o.create_by, o.create_time, o.update_by, o.update_time,
                u.nickname as nickname
@@ -91,8 +93,8 @@
     </select>
 
     <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishMallOrder" useGeneratedKeys="true" keyProperty="mallOrderId">
-        insert into fish_mall_order (mall_order_no, user_id, venue_id, total_cents, amount_paid, balance_cents, status, remark, redeem_code, create_time)
-        values (#{mallOrderNo}, #{userId}, #{venueId}, #{totalCents}, #{amountPaid}, #{balanceCents}, #{status}, #{remark2}, #{redeemCode}, sysdate())
+        insert into fish_mall_order (mall_order_no, user_id, venue_id, total_cents, amount_paid, balance_cents, points_used, points_deduct_cents, status, remark, redeem_code, create_time)
+        values (#{mallOrderNo}, #{userId}, #{venueId}, #{totalCents}, #{amountPaid}, #{balanceCents}, #{pointsUsed}, #{pointsDeductCents}, #{status}, #{remark2}, #{redeemCode}, sysdate())
     </insert>
 
     <update id="update" parameterType="com.ruoyi.fishing.domain.FishMallOrder">
@@ -101,6 +103,8 @@
             <if test="status       != null">status = #{status},</if>
             <if test="amountPaid   != null">amount_paid = #{amountPaid},</if>
             <if test="balanceCents != null">balance_cents = #{balanceCents},</if>
+            <if test="pointsUsed   != null">points_used = #{pointsUsed},</if>
+            <if test="pointsDeductCents != null">points_deduct_cents = #{pointsDeductCents},</if>
             <if test="payTradeNo   != null">pay_trade_no = #{payTradeNo},</if>
             <if test="paidTime     != null">paid_time = #{paidTime},</if>
             <if test="redeemedTime != null">redeemed_time = #{redeemedTime},</if>
