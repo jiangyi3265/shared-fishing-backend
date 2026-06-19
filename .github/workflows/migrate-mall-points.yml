@@ -1,0 +1,92 @@
+name: Migrate Mall Points Columns
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install SSH helper
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Add fish_mall_order points columns (idempotent)
+        timeout-minutes: 5
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${SSH_HOST:?Missing SSH_HOST secret}"
+          : "${SSH_USER:?Missing SSH_USER secret}"
+          : "${DB_NAME:?Missing DB_NAME secret}"
+          : "${DB_USER:?Missing DB_USER secret}"
+          SSH_PORT="${SSH_PORT:-22}"
+
+          if [ -z "${SSH_PRIVATE_KEY:-}" ] && [ -z "${SSH_PASSWORD:-}" ]; then
+            echo "Set SSH_PRIVATE_KEY or SSH_PASSWORD in repo secrets."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh_cmd=(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -p "${SSH_PORT}")
+          if [ -n "${SSH_PRIVATE_KEY:-}" ]; then
+            printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            ssh_cmd+=(-i ~/.ssh/deploy_key)
+          fi
+          remote="${SSH_USER}@${SSH_HOST}"
+
+          remote_ssh() {
+            if [ -n "${SSH_PRIVATE_KEY:-}" ]; then
+              "${ssh_cmd[@]}" "${remote}" "$@"
+            else
+              sshpass -p "${SSH_PASSWORD}" "${ssh_cmd[@]}" "${remote}" "$@"
+            fi
+          }
+
+          remote_ssh "DB_NAME='${DB_NAME}' DB_USER='${DB_USER}' DB_PASSWORD='${DB_PASSWORD}' bash -s" <<'EOF'
+          set -euo pipefail
+
+          MYSQL_BIN="$(command -v mysql || true)"
+          if [ -z "${MYSQL_BIN}" ] && [ -x /www/server/mysql/bin/mysql ]; then
+            MYSQL_BIN=/www/server/mysql/bin/mysql
+          fi
+          if [ -z "${MYSQL_BIN}" ]; then
+            echo "mysql command not found"
+            exit 1
+          fi
+
+          run_sql() {
+            if [ -n "${DB_PASSWORD}" ]; then
+              MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_BIN}" --default-character-set=utf8mb4 -u "${DB_USER}" "${DB_NAME}" "$@"
+            else
+              "${MYSQL_BIN}" --default-character-set=utf8mb4 -u "${DB_USER}" "${DB_NAME}" "$@"
+            fi
+          }
+
+          cat > /tmp/migrate_mall_points.sql <<'SQL'
+          SET @db := DATABASE();
+          SET @c1 := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'fish_mall_order' AND COLUMN_NAME = 'points_used');
+          SET @s1 := IF(@c1 = 0, 'ALTER TABLE fish_mall_order ADD COLUMN points_used INT NOT NULL DEFAULT 0', 'DO 0');
+          PREPARE st1 FROM @s1; EXECUTE st1; DEALLOCATE PREPARE st1;
+          SET @c2 := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'fish_mall_order' AND COLUMN_NAME = 'points_deduct_cents');
+          SET @s2 := IF(@c2 = 0, 'ALTER TABLE fish_mall_order ADD COLUMN points_deduct_cents INT NOT NULL DEFAULT 0', 'DO 0');
+          PREPARE st2 FROM @s2; EXECUTE st2; DEALLOCATE PREPARE st2;
+          SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, COLUMN_DEFAULT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'fish_mall_order' AND COLUMN_NAME IN ('points_used', 'points_deduct_cents');
+          SQL
+
+          run_sql < /tmp/migrate_mall_points.sql
+          rm -f /tmp/migrate_mall_points.sql
+          echo "Mall points columns migration completed."
+          EOF
