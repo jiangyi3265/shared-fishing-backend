@@ -30,6 +30,21 @@
         left join fish_venue v on o.venue_id = v.venue_id
     </sql>
 
+    <select id="selectWeightRanking" resultType="java.util.LinkedHashMap">
+        select o.user_id                as userId,
+               u.nickname               as nickname,
+               sum(o.weight_grams)      as weightGram,
+               count(*)                 as catchCount
+        from fish_weigh_order o
+        left join fish_user u on o.user_id = u.user_id
+        where o.status = 1
+          and o.create_time &gt;= date_format(curdate(), '%Y-%m-01')
+          <if test="venueId != null">and o.venue_id = #{venueId}</if>
+        group by o.user_id, u.nickname
+        order by weightGram desc
+        limit 20
+    </select>
+
     <select id="selectById" resultMap="W">
         <include refid="vo"/> where o.weigh_id = #{fishWeighId}
     </select>

@@ -21,6 +21,9 @@ public interface IFishPointsService
     FishPointsExchange exchange(Long userId, Long goodsId);
     int deliverExchange(Long exchangeId);
 
+    // 积分榜
+    List<Map<String, Object>> selectPointsRanking();
+
     // 积分操作
     int getUserPoints(Long userId);
     void addPoints(Long userId, int delta, String type, String relatedId, String remark);

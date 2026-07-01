@@ -1,6 +1,7 @@
 package com.ruoyi.fishing.service;
 
 import java.util.List;
+import java.util.Map;
 import com.ruoyi.fishing.domain.FishWeighOrder;
 
 /**
@@ -8,6 +9,9 @@ import com.ruoyi.fishing.domain.FishWeighOrder;
  */
 public interface IFishWeighService
 {
+    /** 钓王榜：按当月累计钓获重量排名（venueId 为空则全场） */
+    List<Map<String, Object>> selectWeightRanking(Long venueId);
+
     /** 默认路人鱼获单价(分/斤) */
     int DEFAULT_PRICE_CENTS = 1180;
     /** 默认会员鱼获单价(分/斤) */

@@ -2,6 +2,7 @@ package com.ruoyi.fishing.service.impl;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -130,4 +131,7 @@ public class FishWeighServiceImpl implements IFishWeighService
 
     @Override
     public List<FishWeighOrder> selectList(FishWeighOrder q) { return weighMapper.selectList(q); }
+
+    @Override
+    public List<Map<String, Object>> selectWeightRanking(Long venueId) { return weighMapper.selectWeightRanking(venueId); }
 }

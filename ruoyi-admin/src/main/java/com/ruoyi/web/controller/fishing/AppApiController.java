@@ -1205,6 +1205,21 @@ public class AppApiController
         return AjaxResult.success(weighService.selectByUser(userId));
     }
 
+    // ===== 排行榜（钓王榜 / 积分榜）=====
+
+    /** 排行榜：type=weight 按当月钓获重量（可传 venueId 限定本场），type=points 按积分余额 */
+    @Anonymous
+    @GetMapping("/rank/list")
+    public AjaxResult rankList(@RequestParam(required = false, defaultValue = "weight") String type,
+                              @RequestParam(required = false) Long venueId)
+    {
+        if ("points".equalsIgnoreCase(type))
+        {
+            return AjaxResult.success(pointsService.selectPointsRanking());
+        }
+        return AjaxResult.success(weighService.selectWeightRanking(venueId));
+    }
+
     /** 解析钓场ID：为空时取默认（第一个）钓场 */
     private Long resolveDefaultVenueId(Long venueId)
     {

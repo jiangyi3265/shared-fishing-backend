@@ -2,12 +2,16 @@ package com.ruoyi.fishing.mapper;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import org.apache.ibatis.annotations.Param;
 import com.ruoyi.fishing.domain.FishPointsGoods;
 import com.ruoyi.fishing.domain.FishPointsExchange;
 
 public interface FishPointsMapper
 {
+    /** 积分榜：按积分余额排名 */
+    List<Map<String, Object>> selectPointsRanking();
+
     // 积分商品
     FishPointsGoods selectGoodsById(Long goodsId);
     List<FishPointsGoods> selectGoodsList(FishPointsGoods query);

@@ -33,6 +33,8 @@ public class FishPointsServiceImpl implements IFishPointsService
     @Override public List<FishPointsExchange> selectExchangeList(FishPointsExchange q) { return mapper.selectExchangeList(q); }
     @Override public List<FishPointsExchange> selectExchangeByUser(Long userId) { return mapper.selectExchangeByUser(userId); }
 
+    @Override public List<Map<String, Object>> selectPointsRanking() { return mapper.selectPointsRanking(); }
+
     @Override
     public int getUserPoints(Long userId) {
         Integer p = mapper.selectUserPoints(userId);

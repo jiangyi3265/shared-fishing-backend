@@ -97,6 +97,18 @@
         update fish_points_exchange set status = #{status}, update_time = sysdate() where exchange_id = #{exchangeId}
     </update>
 
+    <!-- 积分榜 -->
+    <select id="selectPointsRanking" resultType="java.util.LinkedHashMap">
+        select u.user_id as userId,
+               u.nickname as nickname,
+               u.points   as points,
+               cast(least(10, floor(u.points / 1000) + 1) as signed) as level
+        from fish_user u
+        where u.points &gt; 0
+        order by u.points desc
+        limit 20
+    </select>
+
     <!-- 用户积分 -->
     <update id="addPoints">
         update fish_user set points = points + #{delta}
