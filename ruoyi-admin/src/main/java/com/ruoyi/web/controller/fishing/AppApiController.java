@@ -1213,11 +1213,19 @@ public class AppApiController
     public AjaxResult rankList(@RequestParam(required = false, defaultValue = "weight") String type,
                               @RequestParam(required = false) Long venueId)
     {
-        if ("points".equalsIgnoreCase(type))
+        try
         {
-            return AjaxResult.success(pointsService.selectPointsRanking());
+            if ("points".equalsIgnoreCase(type))
+            {
+                return AjaxResult.success(pointsService.selectPointsRanking());
+            }
+            return AjaxResult.success(weighService.selectWeightRanking(venueId));
         }
-        return AjaxResult.success(weighService.selectWeightRanking(venueId));
+        catch (Exception e)
+        {
+            // 榜单降级：底层表缺失或查询异常时返回空列表，前端回退演示数据，避免 500 与原始报错弹窗
+            return AjaxResult.success(new java.util.ArrayList<>());
+        }
     }
 
     /** 解析钓场ID：为空时取默认（第一个）钓场 */
