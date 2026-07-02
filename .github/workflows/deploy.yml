@@ -234,9 +234,20 @@ jobs:
             HEALTH_URL="http://127.0.0.1:${SERVER_PORT:-8080}/app/venue/default"
           fi
 
+          response_has_error() {
+            grep -Eiq '"code"[[:space:]]*:[[:space:]]*(4[0-9]{2}|5[0-9]{2})|### Error|Exception|SQLException|SQLSyntaxErrorException' "$1"
+          }
+
           if command -v curl >/dev/null 2>&1; then
             for i in $(seq 1 20); do
               if curl -fsS --max-time 5 "${HEALTH_URL}" >/tmp/fishing-health.json; then
+                if response_has_error /tmp/fishing-health.json; then
+                  echo "Backend health endpoint returned an error payload: ${HEALTH_URL}"
+                  head -c 1000 /tmp/fishing-health.json || true
+                  echo
+                  sleep 3
+                  continue
+                fi
                 echo "Backend health check passed: ${HEALTH_URL}"
                 head -c 500 /tmp/fishing-health.json || true
                 echo
@@ -263,8 +274,19 @@ jobs:
           set -euo pipefail
           HEALTH_URL="${BACKEND_PUBLIC_HEALTH_URL:-https://www.diaoyuus.cn/app/venue/default}"
 
+          response_has_error() {
+            grep -Eiq '"code"[[:space:]]*:[[:space:]]*(4[0-9]{2}|5[0-9]{2})|### Error|Exception|SQLException|SQLSyntaxErrorException' "$1"
+          }
+
           for i in $(seq 1 20); do
             if curl -fsS --max-time 8 "${HEALTH_URL}" >/tmp/backend-public-health.txt; then
+              if response_has_error /tmp/backend-public-health.txt; then
+                echo "Public backend endpoint returned an error payload: ${HEALTH_URL}"
+                head -c 1000 /tmp/backend-public-health.txt || true
+                echo
+                sleep 3
+                continue
+              fi
               echo "Public backend health check passed: ${HEALTH_URL}"
               head -c 500 /tmp/backend-public-health.txt || true
               echo
