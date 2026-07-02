@@ -56,6 +56,7 @@ jobs:
           BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
           BACKEND_SERVICE: ${{ secrets.BACKEND_SERVICE }}
           BACKEND_HEALTH_URL: ${{ secrets.BACKEND_HEALTH_URL }}
+          EXTRA_REQUIRED_SERVICES: ${{ secrets.EXTRA_REQUIRED_SERVICES }}
         run: |
           set -euo pipefail
 
@@ -110,8 +111,10 @@ jobs:
 
           printf '%s' "${BACKEND_SERVICE:-}" > .backend_service
           printf '%s' "${BACKEND_HEALTH_URL:-}" > .backend_health_url
+          printf '%s' "${EXTRA_REQUIRED_SERVICES:-}" > .extra_required_services
           remote_scp .backend_service "${DEPLOY_DIR}/.backend_service"
           remote_scp .backend_health_url "${DEPLOY_DIR}/.backend_health_url"
+          remote_scp .extra_required_services "${DEPLOY_DIR}/.extra_required_services"
 
           remote_ssh "bash -s" -- "${DEPLOY_DIR}" "${SOURCE_ROOT}" "${JAR_NAME}" "${SOURCE_ARCHIVE}" "${GITHUB_SHA}" <<'EOF'
           set -euo pipefail
@@ -124,6 +127,7 @@ jobs:
           RELEASE_DIR="${SOURCE_ROOT}/${COMMIT_SHA}"
           SERVICE_NAME="$(cat "${DEPLOY_DIR}/.backend_service" 2>/dev/null || true)"
           HEALTH_URL="$(cat "${DEPLOY_DIR}/.backend_health_url" 2>/dev/null || true)"
+          EXTRA_REQUIRED_SERVICES="$(cat "${DEPLOY_DIR}/.extra_required_services" 2>/dev/null || true)"
           BACKUP_SUFFIX="$(date +%Y%m%d%H%M%S)"
 
           case "${RELEASE_DIR}" in
@@ -154,7 +158,7 @@ jobs:
 
           install -m 644 "ruoyi-admin/target/${JAR_NAME}" "${DEPLOY_DIR}/${JAR_NAME}"
           install -m 755 ry.sh "${DEPLOY_DIR}/ry.sh"
-          rm -f "${DEPLOY_DIR}/.backend_service" "${DEPLOY_DIR}/.backend_health_url"
+          rm -f "${DEPLOY_DIR}/.backend_service" "${DEPLOY_DIR}/.backend_health_url" "${DEPLOY_DIR}/.extra_required_services"
 
           cd "${DEPLOY_DIR}"
 
@@ -166,6 +170,35 @@ jobs:
             fi
           }
 
+          unit_exists() {
+            local svc="$1"
+            systemctl list-unit-files "${svc}.service" --no-legend 2>/dev/null | grep -q "${svc}.service" \
+              || systemctl status "${svc}.service" >/dev/null 2>&1
+          }
+
+          assert_unit_active() {
+            local svc="$1"
+            run_systemctl is-active --quiet "${svc}.service"
+            echo "Service ${svc}.service is active."
+          }
+
+          assert_one_service_active() {
+            local label="$1"
+            shift
+            local svc=""
+            for candidate in "$@"; do
+              if unit_exists "${candidate}"; then
+                svc="${candidate}"
+                break
+              fi
+            done
+            if [ -z "${svc}" ]; then
+              echo "Warning: no ${label} systemd unit found among: $*"
+              return 0
+            fi
+            assert_unit_active "${svc}"
+          }
+
           if [ -n "${SERVICE_NAME}" ] && command -v systemctl >/dev/null 2>&1 && run_systemctl list-unit-files "${SERVICE_NAME}.service" --no-legend | grep -q "${SERVICE_NAME}.service"; then
             run_systemctl restart "${SERVICE_NAME}.service"
             run_systemctl status "${SERVICE_NAME}.service" --no-pager -l || true
@@ -175,6 +208,18 @@ jobs:
             fi
             ./ry.sh restart
             ./ry.sh status
+          fi
+
+          if command -v systemctl >/dev/null 2>&1; then
+            assert_one_service_active "Nginx" nginx
+            assert_one_service_active "Redis" redis redis-server
+            assert_one_service_active "MySQL" mysql mysqld mariadb
+
+            for svc in ${EXTRA_REQUIRED_SERVICES:-}; do
+              assert_unit_active "${svc}"
+            done
+          else
+            echo "systemctl is not available; skipped system service checks."
           fi
 
           if [ -z "${HEALTH_URL}" ]; then
@@ -206,3 +251,23 @@ jobs:
 
           echo "curl is not installed on the server; skipped HTTP health check."
           EOF
+
+      - name: Verify public backend endpoint
+        env:
+          BACKEND_PUBLIC_HEALTH_URL: ${{ secrets.BACKEND_PUBLIC_HEALTH_URL }}
+        run: |
+          set -euo pipefail
+          HEALTH_URL="${BACKEND_PUBLIC_HEALTH_URL:-https://www.diaoyuus.cn/app/venue/default}"
+
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 8 "${HEALTH_URL}" >/tmp/backend-public-health.txt; then
+              echo "Public backend health check passed: ${HEALTH_URL}"
+              head -c 500 /tmp/backend-public-health.txt || true
+              echo
+              exit 0
+            fi
+            sleep 3
+          done
+
+          echo "Public backend health check failed: ${HEALTH_URL}"
+          exit 1
