@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.fishing.domain.FishRentalGoods;
 import com.ruoyi.fishing.domain.FishRentalOrder;
+import com.ruoyi.fishing.domain.FishUserBalance;
 import com.ruoyi.fishing.mapper.FishRentalMapper;
 import com.ruoyi.fishing.service.IFishBalanceService;
 import com.ruoyi.fishing.service.IFishRentalService;
@@ -37,6 +38,18 @@ public class FishRentalServiceImpl implements IFishRentalService
         userService.assertNotBlacklisted(userId);
         FishRentalGoods g = mapper.selectGoodsById(goodsId);
         if (g == null || !"0".equals(g.getStatus())) throw new ServiceException("装备不存在或已下架");
+        int totalCharge = (g.getDepositCents() == null ? 0 : g.getDepositCents())
+                        + (g.getRentCents() == null ? 0 : g.getRentCents());
+        if (totalCharge > 0) {
+            FishUserBalance balance = balanceService.getBalance(userId);
+            int available = balance == null || balance.getBalanceCents() == null ? 0 : balance.getBalanceCents();
+            if (available < totalCharge) {
+                int missing = totalCharge - available;
+                throw new ServiceException("储值余额不足：租借「" + g.getName() + "」需 ¥"
+                        + formatCents(totalCharge) + "，当前余额 ¥" + formatCents(available)
+                        + "，还差 ¥" + formatCents(missing) + "。请先充值后再租借。");
+            }
+        }
         int dec = mapper.decreaseStock(goodsId);
         if (dec == 0) throw new ServiceException("库存不足");
 
@@ -51,8 +64,6 @@ public class FishRentalServiceImpl implements IFishRentalService
         mapper.insertOrder(o);
 
         // 从余额扣取押金+租金
-        int totalCharge = (g.getDepositCents() == null ? 0 : g.getDepositCents())
-                        + (g.getRentCents() == null ? 0 : g.getRentCents());
         if (totalCharge > 0) {
             balanceService.applyDelta(userId, -totalCharge, "consume_fishing",
                     o.getOrderNo(), "装备租赁(" + g.getName() + ")", "system");
@@ -79,5 +90,10 @@ public class FishRentalServiceImpl implements IFishRentalService
     @Override
     public int forfeitDeposit(Long orderId, String remark) {
         return mapper.updateOrderStatus(orderId, 3);
+    }
+
+    private String formatCents(int cents) {
+        int abs = Math.abs(cents);
+        return (cents < 0 ? "-" : "") + (abs / 100) + "." + String.format("%02d", abs % 100);
     }
 }
