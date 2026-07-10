@@ -31,6 +31,7 @@ public class FishSpotServiceImpl implements IFishSpotService
 
     @Override
     public int insertSpot(FishSpot spot) {
+        if (spot.getVenueId() == null) throw new ServiceException("请选择所属钓场");
         spot.setCreateBy(safeUser());
         spot.setCreateTime(DateUtils.getNowDate());
         if (spot.getStatus() == null) spot.setStatus("0");
