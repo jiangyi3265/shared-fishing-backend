@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: deploy-backend
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   DEPLOY_DIR: /www/wwwroot/dyjava
@@ -56,6 +56,7 @@ jobs:
           BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
           BACKEND_SERVICE: ${{ secrets.BACKEND_SERVICE }}
           BACKEND_HEALTH_URL: ${{ secrets.BACKEND_HEALTH_URL }}
+          BACKEND_PUBLIC_HEALTH_URL: ${{ secrets.BACKEND_PUBLIC_HEALTH_URL }}
           EXTRA_REQUIRED_SERVICES: ${{ secrets.EXTRA_REQUIRED_SERVICES }}
         run: |
           set -euo pipefail
@@ -111,13 +112,15 @@ jobs:
 
           printf '%s' "${BACKEND_SERVICE:-}" > .backend_service
           printf '%s' "${BACKEND_HEALTH_URL:-}" > .backend_health_url
+          printf '%s' "${BACKEND_PUBLIC_HEALTH_URL:-}" > .backend_public_health_url
           printf '%s' "${EXTRA_REQUIRED_SERVICES:-}" > .extra_required_services
           remote_scp .backend_service "${DEPLOY_DIR}/.backend_service"
           remote_scp .backend_health_url "${DEPLOY_DIR}/.backend_health_url"
+          remote_scp .backend_public_health_url "${DEPLOY_DIR}/.backend_public_health_url"
           remote_scp .extra_required_services "${DEPLOY_DIR}/.extra_required_services"
 
           remote_ssh "bash -s" -- "${DEPLOY_DIR}" "${SOURCE_ROOT}" "${JAR_NAME}" "${SOURCE_ARCHIVE}" "${GITHUB_SHA}" <<'EOF'
-          set -euo pipefail
+          set -Eeuo pipefail
 
           DEPLOY_DIR="$1"
           SOURCE_ROOT="$2"
@@ -127,6 +130,7 @@ jobs:
           RELEASE_DIR="${SOURCE_ROOT}/${COMMIT_SHA}"
           SERVICE_NAME="$(cat "${DEPLOY_DIR}/.backend_service" 2>/dev/null || true)"
           HEALTH_URL="$(cat "${DEPLOY_DIR}/.backend_health_url" 2>/dev/null || true)"
+          PUBLIC_HEALTH_URL="$(cat "${DEPLOY_DIR}/.backend_public_health_url" 2>/dev/null || true)"
           EXTRA_REQUIRED_SERVICES="$(cat "${DEPLOY_DIR}/.extra_required_services" 2>/dev/null || true)"
           BACKUP_SUFFIX="$(date +%Y%m%d%H%M%S)"
 
@@ -149,18 +153,60 @@ jobs:
           rm -f "${DEPLOY_DIR}/.backend_env"
 
           cd "${RELEASE_DIR}"
-          mvn -B -DskipTests clean package
+          mvn -B clean package
           test -f "ruoyi-admin/target/${JAR_NAME}"
 
-          if [ -f "${DEPLOY_DIR}/${JAR_NAME}" ]; then
-            cp "${DEPLOY_DIR}/${JAR_NAME}" "${DEPLOY_DIR}/${JAR_NAME}.${BACKUP_SUFFIX}.bak"
+          MIGRATION_FILE="${RELEASE_DIR}/sql/migration-2026-07-12-app-bugfixes.sql"
+          ENV_FILE="${DEPLOY_DIR}/.env.production"
+          if [ ! -f "${MIGRATION_FILE}" ]; then
+            echo "Database migration file is missing: ${MIGRATION_FILE}"
+            exit 1
+          fi
+          if [ ! -f "${ENV_FILE}" ]; then
+            echo "Database migration requires ${ENV_FILE} with DB_HOST, DB_PORT, DB_NAME, DB_USER and DB_PASSWORD."
+            exit 1
           fi
 
-          install -m 644 "ruoyi-admin/target/${JAR_NAME}" "${DEPLOY_DIR}/${JAR_NAME}"
-          install -m 755 ry.sh "${DEPLOY_DIR}/ry.sh"
-          rm -f "${DEPLOY_DIR}/.backend_service" "${DEPLOY_DIR}/.backend_health_url" "${DEPLOY_DIR}/.extra_required_services"
+          read_env_value() {
+            local key="$1"
+            local value
+            value="$(sed -n "s/^${key}=//p" "${ENV_FILE}" | tail -n 1)"
+            case "${value}" in
+              \"*\") value="${value#\"}"; value="${value%\"}" ;;
+              \'*\') value="${value#\'}"; value="${value%\'}" ;;
+            esac
+            printf '%s' "${value}"
+          }
 
-          cd "${DEPLOY_DIR}"
+          DB_HOST="$(read_env_value DB_HOST)"
+          DB_PORT="$(read_env_value DB_PORT)"
+          DB_NAME="$(read_env_value DB_NAME)"
+          DB_USER="$(read_env_value DB_USER)"
+          DB_PASSWORD="$(read_env_value DB_PASSWORD)"
+          DB_HOST="${DB_HOST:-127.0.0.1}"
+          DB_PORT="${DB_PORT:-3306}"
+
+          if [ -z "${DB_NAME}" ] || [ -z "${DB_USER}" ] || [ -z "${DB_PASSWORD}" ]; then
+            echo "Database migration requires non-empty DB_NAME, DB_USER and DB_PASSWORD in ${ENV_FILE}."
+            exit 1
+          fi
+
+          MYSQL_CLIENT="$(command -v mysql || command -v mariadb || true)"
+          if [ -z "${MYSQL_CLIENT}" ]; then
+            echo "Database migration cannot run: install mysql-client or mariadb-client on the server."
+            exit 1
+          fi
+
+          echo "Applying idempotent database migration before replacing the running jar."
+          MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_CLIENT}" \
+            --protocol=TCP \
+            --host="${DB_HOST}" \
+            --port="${DB_PORT}" \
+            --user="${DB_USER}" \
+            --default-character-set=utf8mb4 \
+            "${DB_NAME}" < "${MIGRATION_FILE}"
+          unset DB_PASSWORD MYSQL_PWD
+          echo "Database migration completed."
 
           run_systemctl() {
             if [ "$(id -u)" -eq 0 ]; then
@@ -203,97 +249,193 @@ jobs:
             fi
           }
 
-          if [ -n "${SERVICE_NAME}" ] && command -v systemctl >/dev/null 2>&1 && run_systemctl list-unit-files "${SERVICE_NAME}.service" --no-legend | grep -q "${SERVICE_NAME}.service"; then
-            run_systemctl restart "${SERVICE_NAME}.service"
-            run_systemctl status "${SERVICE_NAME}.service" --no-pager -l || true
-          else
-            if [ -n "${SERVICE_NAME}" ]; then
-              echo "Systemd service ${SERVICE_NAME}.service was not found or cannot be controlled; falling back to ry.sh."
+          backend_uses_systemd() {
+            [ -n "${SERVICE_NAME}" ] \
+              && command -v systemctl >/dev/null 2>&1 \
+              && unit_exists "${SERVICE_NAME}"
+          }
+
+          restart_backend() {
+            cd "${DEPLOY_DIR}"
+            if backend_uses_systemd; then
+              if ! run_systemctl restart "${SERVICE_NAME}.service"; then
+                echo "Failed to restart ${SERVICE_NAME}.service."
+                return 1
+              fi
+              if ! run_systemctl is-active --quiet "${SERVICE_NAME}.service"; then
+                echo "Service ${SERVICE_NAME}.service is not active after restart."
+                run_systemctl status "${SERVICE_NAME}.service" --no-pager -l || true
+                return 1
+              fi
+              run_systemctl status "${SERVICE_NAME}.service" --no-pager -l || true
+            else
+              if [ -n "${SERVICE_NAME}" ]; then
+                echo "Systemd service ${SERVICE_NAME}.service was not found or cannot be controlled; falling back to ry.sh."
+              fi
+              if ! ./ry.sh restart; then
+                echo "ry.sh failed to restart the backend."
+                return 1
+              fi
             fi
-            ./ry.sh restart
-            ./ry.sh status
-          fi
+            return 0
+          }
 
-          if command -v systemctl >/dev/null 2>&1; then
-            report_one_service_status "Nginx" nginx
-            report_one_service_status "Redis" redis redis-server
-            report_one_service_status "MySQL" mysql mysqld mariadb
+          stop_backend() {
+            cd "${DEPLOY_DIR}"
+            if backend_uses_systemd; then
+              run_systemctl stop "${SERVICE_NAME}.service"
+            elif [ -x ./ry.sh ]; then
+              ./ry.sh stop
+            fi
+          }
 
-            for svc in ${EXTRA_REQUIRED_SERVICES:-}; do
-              assert_unit_active "${svc}"
-            done
-          else
-            echo "systemctl is not available; skipped system service checks."
-          fi
+          report_required_services() {
+            if command -v systemctl >/dev/null 2>&1; then
+              report_one_service_status "Nginx" nginx
+              report_one_service_status "Redis" redis redis-server
+              report_one_service_status "MySQL" mysql mysqld mariadb
+
+              for svc in ${EXTRA_REQUIRED_SERVICES:-}; do
+                assert_unit_active "${svc}"
+              done
+            else
+              echo "systemctl is not available; skipped system service checks."
+            fi
+          }
 
           if [ -z "${HEALTH_URL}" ]; then
-            SERVER_PORT=""
-            if [ -f .env.production ]; then
-              SERVER_PORT="$(grep -E '^SERVER_PORT=' .env.production | tail -n 1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '[:space:]' || true)"
-            fi
+            SERVER_PORT="$(read_env_value SERVER_PORT)"
             HEALTH_URL="http://127.0.0.1:${SERVER_PORT:-8080}/app/venue/default"
           fi
+          PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://www.diaoyuus.cn/app/venue/default}"
 
           response_has_error() {
             grep -Eiq '"code"[[:space:]]*:[[:space:]]*(4[0-9]{2}|5[0-9]{2})|### Error|Exception|SQLException|SQLSyntaxErrorException' "$1"
           }
 
-          if command -v curl >/dev/null 2>&1; then
-            for i in $(seq 1 20); do
-              if curl -fsS --max-time 5 "${HEALTH_URL}" >/tmp/fishing-health.json; then
-                if response_has_error /tmp/fishing-health.json; then
-                  echo "Backend health endpoint returned an error payload: ${HEALTH_URL}"
-                  head -c 1000 /tmp/fishing-health.json || true
+          wait_for_health() {
+            local url="$1"
+            local label="$2"
+            local timeout_seconds="$3"
+            local attempts="$4"
+            local output_file="$5"
+            local i
+
+            rm -f "${output_file}"
+            for i in $(seq 1 "${attempts}"); do
+              if curl -fsS --max-time "${timeout_seconds}" "${url}" >"${output_file}"; then
+                if response_has_error "${output_file}"; then
+                  echo "${label} returned an error payload (attempt ${i}/${attempts}): ${url}"
+                  head -c 1000 "${output_file}" || true
                   echo
-                  sleep 3
-                  continue
+                else
+                  echo "${label} passed: ${url}"
+                  head -c 500 "${output_file}" || true
+                  echo
+                  return 0
                 fi
-                echo "Backend health check passed: ${HEALTH_URL}"
-                head -c 500 /tmp/fishing-health.json || true
-                echo
-                exit 0
+              else
+                echo "${label} request failed (attempt ${i}/${attempts}): ${url}"
               fi
-              sleep 3
+              if [ "${i}" -lt "${attempts}" ]; then sleep 3; fi
             done
 
-            echo "Backend health check failed: ${HEALTH_URL}"
+            echo "${label} failed after ${attempts} attempts: ${url}"
+            return 1
+          }
+
+          if ! command -v curl >/dev/null 2>&1; then
+            echo "Deployment health checks require curl on the server."
+            exit 1
+          fi
+
+          CURRENT_JAR="${DEPLOY_DIR}/${JAR_NAME}"
+          ROLLBACK_JAR="${DEPLOY_DIR}/${JAR_NAME}.rollback"
+          FAILURE_LOG="${DEPLOY_DIR}/failed-deploy-${COMMIT_SHA}.log"
+          ROLLBACK_AVAILABLE=0
+          DEPLOY_ACTIVE=0
+
+          rollback_on_exit() {
+            local status=$?
+            local restart_status=1
+            trap - EXIT HUP INT TERM
+            if [ "${DEPLOY_ACTIVE}" -ne 1 ] || [ "${status}" -eq 0 ]; then
+              exit "${status}"
+            fi
+
+            set +e
+            {
+              echo "Failed deployment commit: ${COMMIT_SHA}"
+              echo "Failure time: $(date -Is)"
+              echo "Backend log tail before rollback:"
+              tail -n 200 "${DEPLOY_DIR}/logs/${JAR_NAME}.log" 2>/dev/null || true
+              if [ -n "${SERVICE_NAME}" ] && command -v journalctl >/dev/null 2>&1; then
+                echo "Systemd journal before rollback:"
+                journalctl -u "${SERVICE_NAME}.service" -n 100 --no-pager 2>/dev/null || true
+              fi
+            } >"${FAILURE_LOG}" 2>&1
+            cat "${FAILURE_LOG}" || true
+
+            if [ "${ROLLBACK_AVAILABLE}" -eq 1 ] && [ -f "${ROLLBACK_JAR}" ]; then
+              echo "Restoring previous jar from ${ROLLBACK_JAR}."
+              if install -m 644 "${ROLLBACK_JAR}" "${CURRENT_JAR}"; then
+                restart_backend
+                restart_status=$?
+              else
+                echo "Failed to restore the rollback jar."
+                restart_status=1
+              fi
+              if [ "${restart_status}" -eq 0 ]; then
+                wait_for_health "${HEALTH_URL}" "Rollback backend health check" 5 10 /tmp/fishing-rollback-health.json
+                restart_status=$?
+              fi
+              if [ "${restart_status}" -eq 0 ]; then
+                echo "Rollback completed and the previous backend is healthy."
+              else
+                echo "Rollback jar was restored, but restarting or validating the previous backend failed."
+              fi
+            else
+              echo "No previous jar exists; removing the failed new jar and stopping the backend."
+              rm -f "${CURRENT_JAR}"
+              stop_backend || true
+            fi
+            echo "Failed deployment diagnostics were saved to ${FAILURE_LOG}."
+            exit "${status}"
+          }
+
+          rm -f "${ROLLBACK_JAR}"
+          if [ -f "${CURRENT_JAR}" ]; then
+            install -m 644 "${CURRENT_JAR}" "${ROLLBACK_JAR}"
+            cp "${CURRENT_JAR}" "${CURRENT_JAR}.${BACKUP_SUFFIX}.bak"
+            ROLLBACK_AVAILABLE=1
+          fi
+
+          rm -f \
+            "${DEPLOY_DIR}/.backend_service" \
+            "${DEPLOY_DIR}/.backend_health_url" \
+            "${DEPLOY_DIR}/.backend_public_health_url" \
+            "${DEPLOY_DIR}/.extra_required_services"
+
+          trap rollback_on_exit EXIT
+          trap 'exit 130' HUP INT TERM
+          DEPLOY_ACTIVE=1
+
+          install -m 755 "${RELEASE_DIR}/ry.sh" "${DEPLOY_DIR}/ry.sh"
+          install -m 644 "${RELEASE_DIR}/ruoyi-admin/target/${JAR_NAME}" "${CURRENT_JAR}"
+          restart_backend
+          report_required_services
+
+          if ! wait_for_health "${HEALTH_URL}" "Backend internal health check" 5 20 /tmp/fishing-health.json; then
             tail -n 200 "${DEPLOY_DIR}/logs/${JAR_NAME}.log" 2>/dev/null || true
             if [ -n "${SERVICE_NAME}" ] && command -v journalctl >/dev/null 2>&1; then
               journalctl -u "${SERVICE_NAME}.service" -n 100 --no-pager 2>/dev/null || true
             fi
-            exit 1
+            false
           fi
 
-          echo "curl is not installed on the server; skipped HTTP health check."
+          wait_for_health "${PUBLIC_HEALTH_URL}" "Backend public health check" 8 20 /tmp/fishing-public-health.json
+
+          DEPLOY_ACTIVE=0
+          trap - EXIT HUP INT TERM
+          echo "Backend deployment completed successfully. Rollback jar retained at ${ROLLBACK_JAR}."
           EOF
-
-      - name: Verify public backend endpoint
-        env:
-          BACKEND_PUBLIC_HEALTH_URL: ${{ secrets.BACKEND_PUBLIC_HEALTH_URL }}
-        run: |
-          set -euo pipefail
-          HEALTH_URL="${BACKEND_PUBLIC_HEALTH_URL:-https://www.diaoyuus.cn/app/venue/default}"
-
-          response_has_error() {
-            grep -Eiq '"code"[[:space:]]*:[[:space:]]*(4[0-9]{2}|5[0-9]{2})|### Error|Exception|SQLException|SQLSyntaxErrorException' "$1"
-          }
-
-          for i in $(seq 1 20); do
-            if curl -fsS --max-time 8 "${HEALTH_URL}" >/tmp/backend-public-health.txt; then
-              if response_has_error /tmp/backend-public-health.txt; then
-                echo "Public backend endpoint returned an error payload: ${HEALTH_URL}"
-                head -c 1000 /tmp/backend-public-health.txt || true
-                echo
-                sleep 3
-                continue
-              fi
-              echo "Public backend health check passed: ${HEALTH_URL}"
-              head -c 500 /tmp/backend-public-health.txt || true
-              echo
-              exit 0
-            fi
-            sleep 3
-          done
-
-          echo "Public backend health check failed: ${HEALTH_URL}"
-          exit 1

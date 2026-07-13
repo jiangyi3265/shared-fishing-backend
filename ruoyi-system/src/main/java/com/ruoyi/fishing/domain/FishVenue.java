@@ -1,5 +1,6 @@
 package com.ruoyi.fishing.domain;
 
+import java.math.BigDecimal;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 import com.ruoyi.common.annotation.Excel;
@@ -19,6 +20,14 @@ public class FishVenue extends BaseEntity
 
     @Excel(name = "地址")
     private String address;
+
+    /** GCJ-02 纬度，供微信地图导航使用。 */
+    @Excel(name = "纬度")
+    private BigDecimal latitude;
+
+    /** GCJ-02 经度，供微信地图导航使用。 */
+    @Excel(name = "经度")
+    private BigDecimal longitude;
 
     private String notice;
 
@@ -46,6 +55,10 @@ public class FishVenue extends BaseEntity
     public void setName(String name) { this.name = name; }
     public String getAddress() { return address; }
     public void setAddress(String address) { this.address = address; }
+    public BigDecimal getLatitude() { return latitude; }
+    public void setLatitude(BigDecimal latitude) { this.latitude = latitude; }
+    public BigDecimal getLongitude() { return longitude; }
+    public void setLongitude(BigDecimal longitude) { this.longitude = longitude; }
     public String getNotice() { return notice; }
     public void setNotice(String notice) { this.notice = notice; }
     public String getPhone() { return phone; }
@@ -65,6 +78,7 @@ public class FishVenue extends BaseEntity
     public String toString() {
         return new ToStringBuilder(this, ToStringStyle.MULTI_LINE_STYLE)
             .append("venueId", venueId).append("name", name).append("address", address)
+            .append("latitude", latitude).append("longitude", longitude)
             .append("notice", notice).append("phone", phone).append("ruleId", ruleId)
             .append("status", status).append("createTime", getCreateTime()).toString();
     }

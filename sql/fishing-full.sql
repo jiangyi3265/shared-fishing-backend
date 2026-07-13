@@ -374,6 +374,8 @@ CREATE TABLE `fish_venue` (
   `venue_id`       BIGINT(20)   NOT NULL AUTO_INCREMENT COMMENT '钓场ID',
   `name`           VARCHAR(100) NOT NULL                COMMENT '钓场名称',
   `address`        VARCHAR(200) DEFAULT ''              COMMENT '地址',
+  `latitude`       DECIMAL(10,7) DEFAULT NULL           COMMENT '纬度（GCJ-02）',
+  `longitude`      DECIMAL(10,7) DEFAULT NULL           COMMENT '经度（GCJ-02）',
   `notice`         VARCHAR(500) DEFAULT ''              COMMENT '营业说明',
   `phone`          VARCHAR(30)  DEFAULT ''              COMMENT '联系方式',
   `rule_id`        BIGINT(20)   DEFAULT NULL            COMMENT '默认计费规则ID',
@@ -435,7 +437,7 @@ DROP TABLE IF EXISTS `fish_qrcode`;
 CREATE TABLE `fish_qrcode` (
   `qr_id`       BIGINT(20)   NOT NULL AUTO_INCREMENT COMMENT '二维码ID',
   `venue_id`    BIGINT(20)   NOT NULL                COMMENT '钓场ID',
-  `qr_type`     VARCHAR(10)  NOT NULL                COMMENT '类型(start进场 end离场)',
+  `qr_type`     VARCHAR(10)  NOT NULL                COMMENT '类型(start进场 end离场 common通用)',
   `scene_value` VARCHAR(100) DEFAULT ''              COMMENT '场景值',
   `remark`      VARCHAR(255) DEFAULT ''              COMMENT '备注',
   `status`      CHAR(1)      DEFAULT '0'             COMMENT '状态（0正常 1停用）',
@@ -449,7 +451,8 @@ CREATE TABLE `fish_qrcode` (
 
 INSERT INTO `fish_qrcode` (`venue_id`, `qr_type`, `scene_value`, `remark`, `status`, `create_by`, `create_time`) VALUES
 (1, 'start', 'action=start&venueId=1', '默认入场码', '0', 'admin', sysdate()),
-(1, 'end', 'action=end&venueId=1', '默认离场码', '0', 'admin', sysdate());
+(1, 'end', 'action=end&venueId=1', '默认离场码', '0', 'admin', sysdate()),
+(1, 'common', 'action=common&venueId=1', '默认通用场码', '0', 'admin', sysdate());
 
 -- 订单
 DROP TABLE IF EXISTS `fish_order`;
@@ -594,7 +597,7 @@ INSERT INTO sys_menu VALUES (2032, '人工结束', 2030, 2, '', '', '', '', 1, 0
 INSERT INTO sys_menu VALUES (2033, '订单取消', 2030, 3, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:order:cancel', '#', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_menu VALUES (2034, '订单导出', 2030, 4, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:order:export', '#', 'admin', sysdate(), '', null, '');
 
-INSERT INTO sys_menu VALUES (2040, '广告活动', 2000, 4, 'ad', 'fishing/ad/index', '', '', 1, 0, 'C', '0', '0', 'fishing:ad:list', 'guide', 'admin', sysdate(), '', null, '广告活动菜单');
+INSERT INTO sys_menu VALUES (2040, '轮播图管理', 2000, 4, 'ad', 'fishing/ad/index', '', '', 1, 0, 'C', '0', '0', 'fishing:ad:list', 'guide', 'admin', sysdate(), '', null, '轮播图与活动管理菜单');
 INSERT INTO sys_menu VALUES (2041, '广告查询', 2040, 1, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:ad:query', '#', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_menu VALUES (2042, '广告新增', 2040, 2, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:ad:add', '#', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_menu VALUES (2043, '广告修改', 2040, 3, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:ad:edit', '#', 'admin', sysdate(), '', null, '');
@@ -632,6 +635,7 @@ INSERT INTO sys_dict_data VALUES (504, 5, '已取消', '4', 'fish_order_status',
 INSERT INTO sys_dict_type VALUES (101, '二维码类型', 'fish_qr_type', '0', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_dict_data VALUES (510, 1, '入场', 'start', 'fish_qr_type', '', 'success', 'N', '0', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_dict_data VALUES (511, 2, '离场', 'end',   'fish_qr_type', '', 'warning', 'N', '0', 'admin', sysdate(), '', null, '');
+INSERT INTO sys_dict_data VALUES (512, 3, '通用场码（开始/结算）', 'common', 'fish_qr_type', '', 'primary', 'Y', '0', 'admin', sysdate(), '', null, '同一二维码按用户当前订单状态动态分流');
 
 INSERT INTO sys_dict_type VALUES (102, '广告类型', 'fish_ad_type', '0', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_dict_data VALUES (520, 1, '广告', 'ad',       'fish_ad_type', '', 'info', 'N', '0', 'admin', sysdate(), '', null, '');

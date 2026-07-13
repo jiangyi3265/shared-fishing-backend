@@ -12,7 +12,7 @@ import com.ruoyi.fishing.domain.FishAd;
 import com.ruoyi.fishing.service.IFishAdService;
 
 /**
- * 广告/活动
+ * 轮播图/活动
  */
 @RestController
 @RequestMapping("/fishing/ad")
@@ -37,7 +37,7 @@ public class FishAdController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('fishing:ad:add')")
-    @Log(title = "广告活动", businessType = BusinessType.INSERT)
+    @Log(title = "轮播图管理", businessType = BusinessType.INSERT)
     @PostMapping
     public AjaxResult add(@RequestBody FishAd ad)
     {
@@ -45,7 +45,7 @@ public class FishAdController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('fishing:ad:edit')")
-    @Log(title = "广告活动", businessType = BusinessType.UPDATE)
+    @Log(title = "轮播图管理", businessType = BusinessType.UPDATE)
     @PutMapping
     public AjaxResult edit(@RequestBody FishAd ad)
     {
@@ -53,7 +53,7 @@ public class FishAdController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('fishing:ad:remove')")
-    @Log(title = "广告活动", businessType = BusinessType.DELETE)
+    @Log(title = "轮播图管理", businessType = BusinessType.DELETE)
     @DeleteMapping("/{adIds}")
     public AjaxResult remove(@PathVariable Long[] adIds)
     {

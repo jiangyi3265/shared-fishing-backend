@@ -12,6 +12,10 @@ public class FishQrcode extends BaseEntity
 {
     private static final long serialVersionUID = 1L;
 
+    public static final String TYPE_START = "start";
+    public static final String TYPE_END = "end";
+    public static final String TYPE_COMMON = "common";
+
     private Long qrId;
 
     @Excel(name = "钓场ID")

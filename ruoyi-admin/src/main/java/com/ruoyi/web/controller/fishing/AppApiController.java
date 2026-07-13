@@ -126,7 +126,9 @@ public class AppApiController
     @GetMapping("/venue/default")
     public AjaxResult defaultVenue()
     {
-        List<FishVenue> venues = venueService.selectFishVenueList(new FishVenue());
+        FishVenue query = new FishVenue();
+        query.setStatus("0");
+        List<FishVenue> venues = venueService.selectFishVenueList(query);
         if (venues.isEmpty()) return AjaxResult.success(null);
         FishVenue v = venues.get(0);
         Map<String, Object> data = new HashMap<>();
@@ -183,20 +185,37 @@ public class AppApiController
     /** 开始计时 */
     @Anonymous
     @PostMapping("/order/start")
-    public AjaxResult startOrder(@RequestBody Map<String, Object> body)
+    public AjaxResult startOrder(@RequestBody(required = false) Map<String, Object> body)
     {
         Long userId = currentUserId();
         if (userId == null) return unauthorized();
-        Long bodyUserId = parseLong(body.get("userId"));
+        Long bodyUserId = parseLong(bodyValue(body, "userId"));
         if (bodyUserId != null && !bodyUserId.equals(userId)) return unauthorized();
-        FishQrcode qr = requireScanQrcode(body, "start");
-        Long venueId = parseLong(body.get("venueId"));
-        if (venueId != null && qr.getVenueId() != null && !venueId.equals(qr.getVenueId()))
+
+        Long requestedVenueId = parseLong(bodyValue(body, "venueId"));
+        Long venueId;
+        if (hasScanCredential(body))
         {
-            return AjaxResult.error("入口码与当前钓场不匹配");
+            FishQrcode qr = requireActiveQrcode(body);
+            if (!isStartCapable(qr)) throw new ServiceException("离场码不能用于下竿计时");
+            if (qr.getVenueId() == null) throw new ServiceException("二维码未绑定钓场");
+            if (requestedVenueId != null && !requestedVenueId.equals(qr.getVenueId()))
+            {
+                throw new ServiceException("二维码与当前钓场不匹配");
+            }
+            venueId = qr.getVenueId();
         }
-        venueId = qr.getVenueId();
-        if (venueId == null) return AjaxResult.error("入口码未绑定钓场");
+        else
+        {
+            venueId = resolveDefaultVenueId(requestedVenueId);
+            if (venueId == null) throw new ServiceException("暂无可用钓场");
+        }
+
+        FishOrder running = orderService.selectRunningOrder(userId);
+        if (running != null && (running.getVenueId() == null || !venueId.equals(running.getVenueId())))
+        {
+            throw new ServiceException("当前已有其他钓场的计时订单");
+        }
         return AjaxResult.success(orderService.startOrder(userId, venueId));
     }
 
@@ -221,18 +240,33 @@ public class AppApiController
     /** 结束计时 */
     @Anonymous
     @PostMapping("/order/finish")
-    public AjaxResult finishOrder(@RequestBody Map<String, Object> body)
+    public AjaxResult finishOrder(@RequestBody(required = false) Map<String, Object> body)
     {
         Long userId = currentUserId();
         if (userId == null) return unauthorized();
-        Long bodyUserId = parseLong(body.get("userId"));
+        Long bodyUserId = parseLong(bodyValue(body, "userId"));
         if (bodyUserId != null && !bodyUserId.equals(userId)) return unauthorized();
-        FishQrcode qr = requireScanQrcode(body, "end");
+
         FishOrder running = orderService.selectRunningOrder(userId);
-        if (running == null) return AjaxResult.error("未检测到进行中的订单");
-        if (qr.getVenueId() != null && running.getVenueId() != null && !qr.getVenueId().equals(running.getVenueId()))
+        if (running == null) throw new ServiceException("未检测到进行中的订单");
+
+        if (hasScanCredential(body))
         {
-            return AjaxResult.error("出口码与当前订单钓场不匹配");
+            FishQrcode qr = requireActiveQrcode(body);
+            if (!isFinishCapable(qr)) throw new ServiceException("二维码类型不支持收竿结算");
+            if (qr.getVenueId() == null) throw new ServiceException("二维码未绑定钓场");
+            if (running.getVenueId() == null || !qr.getVenueId().equals(running.getVenueId()))
+            {
+                throw new ServiceException("二维码与当前订单钓场不匹配");
+            }
+        }
+        else
+        {
+            Long requestedVenueId = parseLong(bodyValue(body, "venueId"));
+            if (requestedVenueId != null && !requestedVenueId.equals(running.getVenueId()))
+            {
+                throw new ServiceException("当前订单不属于所选钓场");
+            }
         }
         return AjaxResult.success(orderService.finishOrder(userId));
     }
@@ -341,10 +375,38 @@ public class AppApiController
         }
         if (qr == null) return AjaxResult.error("二维码无效");
         if ("1".equals(qr.getStatus())) return AjaxResult.error("二维码已停用");
+        if (qr.getVenueId() == null) return AjaxResult.error("二维码未绑定钓场");
+
+        String action;
+        Long userId = currentUserId();
+        FishOrder running = userId == null ? null : orderService.selectRunningOrder(userId);
+        if (running != null)
+        {
+            if (!isFinishCapable(qr)) return AjaxResult.error("二维码类型不支持收竿结算");
+            if (running.getVenueId() == null || !qr.getVenueId().equals(running.getVenueId()))
+            {
+                return AjaxResult.error("二维码与当前订单钓场不匹配");
+            }
+            action = "end";
+        }
+        else if (FishQrcode.TYPE_END.equals(qr.getQrType()))
+        {
+            // 保留旧离场码语义；真正结算时仍会校验当前是否有进行中订单。
+            action = "end";
+        }
+        else if (isStartCapable(qr))
+        {
+            action = "start";
+        }
+        else
+        {
+            return AjaxResult.error("二维码类型不支持");
+        }
+
         Map<String, Object> data = new HashMap<>();
         data.put("qrId", qr.getQrId());
         data.put("venueId", qr.getVenueId());
-        data.put("action", "end".equals(qr.getQrType()) ? "end" : "start");
+        data.put("action", action);
         return AjaxResult.success(data);
     }
 
@@ -760,22 +822,40 @@ public class AppApiController
         return res;
     }
 
-    private FishQrcode requireScanQrcode(Map<String, Object> body, String expectedType)
+    private FishQrcode requireActiveQrcode(Map<String, Object> body)
     {
         FishQrcode qr = resolveRequestQrcode(body);
         if (qr == null)
         {
-            throw new ServiceException("start".equals(expectedType) ? "请先扫描入口码" : "请先扫描出口码");
+            throw new ServiceException("二维码无效");
         }
         if ("1".equals(qr.getStatus()))
         {
             throw new ServiceException("二维码已停用");
         }
-        if (!expectedType.equals(qr.getQrType()))
-        {
-            throw new ServiceException("start".equals(expectedType) ? "请扫描入口码" : "请扫描出口码");
-        }
         return qr;
+    }
+
+    private boolean hasScanCredential(Map<String, Object> body)
+    {
+        if (body == null) return false;
+        Object qrId = body.get("qrId");
+        if (qrId != null && !String.valueOf(qrId).trim().isEmpty()) return true;
+        Object scene = body.get("scene");
+        return scene != null && !String.valueOf(scene).trim().isEmpty();
+    }
+
+    private boolean isStartCapable(FishQrcode qr)
+    {
+        return qr != null && (FishQrcode.TYPE_START.equals(qr.getQrType())
+                || FishQrcode.TYPE_COMMON.equals(qr.getQrType()));
+    }
+
+    private boolean isFinishCapable(FishQrcode qr)
+    {
+        return qr != null && (FishQrcode.TYPE_START.equals(qr.getQrType())
+                || FishQrcode.TYPE_END.equals(qr.getQrType())
+                || FishQrcode.TYPE_COMMON.equals(qr.getQrType()));
     }
 
     private FishQrcode resolveRequestQrcode(Map<String, Object> body)
@@ -797,6 +877,11 @@ public class AppApiController
         if (v == null) return null;
         if (v instanceof Number) return ((Number) v).longValue();
         try { return Long.parseLong(String.valueOf(v)); } catch (Exception e) { return null; }
+    }
+
+    private Object bodyValue(Map<String, Object> body, String key)
+    {
+        return body == null ? null : body.get(key);
     }
 
     private Long currentUserId()
@@ -1232,7 +1317,9 @@ public class AppApiController
     private Long resolveDefaultVenueId(Long venueId)
     {
         if (venueId != null) return venueId;
-        List<FishVenue> venues = venueService.selectFishVenueList(new FishVenue());
+        FishVenue query = new FishVenue();
+        query.setStatus("0");
+        List<FishVenue> venues = venueService.selectFishVenueList(query);
         return venues.isEmpty() ? null : venues.get(0).getVenueId();
     }
 }

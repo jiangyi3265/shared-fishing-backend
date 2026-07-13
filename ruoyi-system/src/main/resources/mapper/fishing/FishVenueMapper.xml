@@ -6,6 +6,8 @@
         <id     property="venueId"     column="venue_id"/>
         <result property="name"        column="name"/>
         <result property="address"     column="address"/>
+        <result property="latitude"    column="latitude"/>
+        <result property="longitude"   column="longitude"/>
         <result property="notice"      column="notice"/>
         <result property="phone"       column="phone"/>
         <result property="ruleId"      column="rule_id"/>
@@ -21,7 +23,7 @@
     </resultMap>
 
     <sql id="selectFishVenueVo">
-        select venue_id, name, address, notice, phone, rule_id,
+        select venue_id, name, address, latitude, longitude, notice, phone, rule_id,
                fish_price_cents, fish_member_price_cents, status, del_flag,
                create_by, create_time, update_by, update_time, remark
         from fish_venue
@@ -48,6 +50,8 @@
         <trim prefix="(" suffix=")" suffixOverrides=",">
             <if test="name != null">name,</if>
             <if test="address != null">address,</if>
+            <if test="latitude != null">latitude,</if>
+            <if test="longitude != null">longitude,</if>
             <if test="notice != null">notice,</if>
             <if test="phone != null">phone,</if>
             <if test="ruleId != null">rule_id,</if>
@@ -61,6 +65,8 @@
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="name != null">#{name},</if>
             <if test="address != null">#{address},</if>
+            <if test="latitude != null">#{latitude},</if>
+            <if test="longitude != null">#{longitude},</if>
             <if test="notice != null">#{notice},</if>
             <if test="phone != null">#{phone},</if>
             <if test="ruleId != null">#{ruleId},</if>
@@ -78,6 +84,8 @@
         <trim prefix="SET" suffixOverrides=",">
             <if test="name != null">name = #{name},</if>
             <if test="address != null">address = #{address},</if>
+            latitude = #{latitude},
+            longitude = #{longitude},
             <if test="notice != null">notice = #{notice},</if>
             <if test="phone != null">phone = #{phone},</if>
             <if test="ruleId != null">rule_id = #{ruleId},</if>
