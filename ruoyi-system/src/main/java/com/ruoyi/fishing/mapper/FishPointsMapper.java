@@ -6,6 +6,7 @@ import java.util.Map;
 import org.apache.ibatis.annotations.Param;
 import com.ruoyi.fishing.domain.FishPointsGoods;
 import com.ruoyi.fishing.domain.FishPointsExchange;
+import com.ruoyi.fishing.domain.FishPointsReward;
 
 public interface FishPointsMapper
 {
@@ -36,6 +37,11 @@ public interface FishPointsMapper
     int insertPointsLog(@Param("userId") Long userId, @Param("delta") int delta,
                         @Param("pointsAfter") int pointsAfter, @Param("type") String type,
                         @Param("relatedId") String relatedId, @Param("remark") String remark);
+
+    // 线上消费积分奖励
+    int insertConsumeReward(FishPointsReward reward);
+    FishPointsReward selectRewardBySource(@Param("userId") Long userId, @Param("sourceNo") String sourceNo);
+    int claimReward(@Param("rewardId") Long rewardId);
 
     // 签到
     int insertCheckin(@Param("userId") Long userId, @Param("checkinDate") Date checkinDate, @Param("points") int points);

@@ -13,8 +13,11 @@
         <result property="weightJin"     column="weight_jin"/>
         <result property="fishCount"     column="fish_count"/>
         <result property="images"        column="images"/>
+        <result property="videoUrl"      column="video_url"/>
         <result property="content"       column="content"/>
         <result property="fishingMethod" column="fishing_method"/>
+        <result property="cardRoundId"   column="card_round_id"/>
+        <result property="cardSpeciesId" column="card_species_id"/>
         <result property="isFeatured"    column="is_featured"/>
         <result property="likeCount"     column="like_count"/>
         <result property="commentCount"  column="comment_count"/>
@@ -28,8 +31,9 @@
 
     <sql id="selectVo">
         select c.catch_id, c.user_id, u.nickname, u.avatar, c.venue_id, c.order_id,
-               c.fish_species, c.weight_jin, c.fish_count, c.images, c.content,
-               c.fishing_method, c.is_featured, c.like_count, c.comment_count, c.status, c.reject_reason,
+               c.fish_species, c.weight_jin, c.fish_count, c.images, c.video_url, c.content,
+               c.fishing_method, c.card_round_id, c.card_species_id,
+               c.is_featured, c.like_count, c.comment_count, c.status, c.reject_reason,
                c.del_flag, c.create_by, c.create_time, c.update_time
         from fish_catch_record c
         left join fish_user u on u.user_id = c.user_id
@@ -66,9 +70,11 @@
 
     <insert id="insert" parameterType="com.ruoyi.fishing.domain.FishCatchRecord" useGeneratedKeys="true" keyProperty="catchId">
         insert into fish_catch_record (user_id, venue_id, order_id, fish_species, weight_jin, fish_count,
-            images, content, fishing_method, is_featured, like_count, status, create_time)
+            images, video_url, content, fishing_method, card_round_id, card_species_id,
+            is_featured, like_count, status, create_time)
         values (#{userId}, #{venueId}, #{orderId}, #{fishSpecies}, #{weightJin}, #{fishCount},
-            #{images}, #{content}, #{fishingMethod}, 0, 0, 0, sysdate())
+            #{images}, #{videoUrl}, #{content}, #{fishingMethod}, #{cardRoundId}, #{cardSpeciesId},
+            0, 0, 0, sysdate())
     </insert>
 
     <update id="update" parameterType="com.ruoyi.fishing.domain.FishCatchRecord">

@@ -9,6 +9,7 @@ import com.ruoyi.fishing.domain.FishCatchComment;
 import com.ruoyi.fishing.mapper.FishCatchRecordMapper;
 import com.ruoyi.fishing.mapper.FishCatchCommentMapper;
 import com.ruoyi.fishing.service.IFishCatchService;
+import com.ruoyi.fishing.service.IFishCardGameService;
 
 @Service
 public class FishCatchServiceImpl implements IFishCatchService
@@ -18,6 +19,9 @@ public class FishCatchServiceImpl implements IFishCatchService
 
     @Autowired
     private FishCatchCommentMapper commentMapper;
+
+    @Autowired
+    private IFishCardGameService cardGameService;
 
     @Override public FishCatchRecord selectById(Long catchId) { return mapper.selectById(catchId); }
     @Override public List<FishCatchRecord> selectList(FishCatchRecord query) { return mapper.selectList(query); }
@@ -42,11 +46,14 @@ public class FishCatchServiceImpl implements IFishCatchService
 
     @Override
     public int audit(Long catchId, int status, String rejectReason) {
+        if (status != 1 && status != 2) return 0;
         FishCatchRecord u = new FishCatchRecord();
         u.setCatchId(catchId);
         u.setStatus(status);
         u.setRejectReason(rejectReason);
-        return mapper.update(u);
+        int changed = mapper.update(u);
+        if (changed > 0) cardGameService.syncCatchAudit(catchId, status);
+        return changed;
     }
 
     @Override

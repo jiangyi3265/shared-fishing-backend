@@ -23,8 +23,11 @@ public class FishCatchRecord extends BaseEntity
 
     private Integer fishCount;
     private String images;
+    private String videoUrl;
     private String content;
     private String fishingMethod;
+    private Long cardRoundId;
+    private Long cardSpeciesId;
 
     @Excel(name = "精选", readConverterExp = "0=普通,1=精选")
     private Integer isFeatured;
@@ -61,10 +64,16 @@ public class FishCatchRecord extends BaseEntity
     public void setFishCount(Integer fishCount) { this.fishCount = fishCount; }
     public String getImages() { return images; }
     public void setImages(String images) { this.images = images; }
+    public String getVideoUrl() { return videoUrl; }
+    public void setVideoUrl(String videoUrl) { this.videoUrl = videoUrl; }
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
     public String getFishingMethod() { return fishingMethod; }
     public void setFishingMethod(String fishingMethod) { this.fishingMethod = fishingMethod; }
+    public Long getCardRoundId() { return cardRoundId; }
+    public void setCardRoundId(Long cardRoundId) { this.cardRoundId = cardRoundId; }
+    public Long getCardSpeciesId() { return cardSpeciesId; }
+    public void setCardSpeciesId(Long cardSpeciesId) { this.cardSpeciesId = cardSpeciesId; }
     public Integer getIsFeatured() { return isFeatured; }
     public void setIsFeatured(Integer isFeatured) { this.isFeatured = isFeatured; }
     public Integer getLikeCount() { return likeCount; }

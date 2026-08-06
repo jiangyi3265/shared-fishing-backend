@@ -14,7 +14,7 @@ public interface IFishOrderService
     public FishOrder selectPendingOrder(Long userId);
 
     /** 开始计时 */
-    public FishOrder startOrder(Long userId, Long venueId);
+    public FishOrder startOrder(Long userId, Long venueId, Long spotId);
 
     /** 结束计时并计算费用 */
     public FishOrder finishOrder(Long userId);

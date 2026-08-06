@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.fishing.domain.FishPointsExchange;
 import com.ruoyi.fishing.domain.FishPointsGoods;
+import com.ruoyi.fishing.domain.FishPointsReward;
 import com.ruoyi.fishing.mapper.FishPointsMapper;
 import com.ruoyi.fishing.service.IFishPointsService;
 
@@ -19,6 +20,7 @@ public class FishPointsServiceImpl implements IFishPointsService
     private static final int BONUS_7DAY = 20;
     private static final int BONUS_14DAY = 50;
     private static final int BONUS_30DAY = 150;
+    private static final int CONSUME_POINTS_PER_YUAN = 5;
 
     @Autowired
     private FishPointsMapper mapper;
@@ -128,11 +130,49 @@ public class FishPointsServiceImpl implements IFishPointsService
 
     @Override
     @Transactional
-    public void grantConsumePoints(Long userId, int amountCents, String orderNo) {
-        int pts = amountCents / 100;
-        if (pts > 0) {
-            addPoints(userId, pts, "consume", orderNo, "消费赠送");
+    public FishPointsReward prepareConsumeReward(Long userId, int amountCents, String sourceType, String sourceNo) {
+        if (userId == null || sourceNo == null || sourceNo.isEmpty() || amountCents < 100) return null;
+        int pts = (amountCents / 100) * CONSUME_POINTS_PER_YUAN;
+        if (pts <= 0) return null;
+
+        FishPointsReward reward = new FishPointsReward();
+        reward.setUserId(userId);
+        reward.setSourceType(sourceType == null ? "fishing" : sourceType);
+        reward.setSourceNo(sourceNo);
+        reward.setAmountCents(amountCents);
+        reward.setPoints(pts);
+        reward.setStatus(0);
+        mapper.insertConsumeReward(reward);
+        return mapper.selectRewardBySource(userId, sourceNo);
+    }
+
+    @Override
+    public FishPointsReward getConsumeReward(Long userId, String sourceNo) {
+        return mapper.selectRewardBySource(userId, sourceNo);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> claimConsumeReward(Long userId, String sourceNo) {
+        FishPointsReward reward = mapper.selectRewardBySource(userId, sourceNo);
+        if (reward == null) throw new ServiceException("暂无可领取积分");
+
+        boolean newlyClaimed = false;
+        if (Integer.valueOf(0).equals(reward.getStatus())) {
+            int changed = mapper.claimReward(reward.getRewardId());
+            if (changed == 1) {
+                addPoints(userId, reward.getPoints(), "consume", sourceNo,
+                        "线上消费赠送（1元=5积分）");
+                newlyClaimed = true;
+            }
         }
+
+        FishPointsReward latest = mapper.selectRewardBySource(userId, sourceNo);
+        Map<String, Object> result = new HashMap<>();
+        result.put("reward", latest);
+        result.put("claimedNow", newlyClaimed);
+        result.put("totalPoints", getUserPoints(userId));
+        return result;
     }
 
     private int calcConsecutiveDays(Long userId) {

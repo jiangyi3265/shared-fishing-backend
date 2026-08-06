@@ -125,6 +125,29 @@
         values (#{userId}, #{delta}, #{pointsAfter}, #{type}, #{relatedId}, #{remark}, sysdate())
     </insert>
 
+    <!-- 线上消费积分奖励：source_no 唯一，支付回调重复执行也不会重复生成 -->
+    <insert id="insertConsumeReward" parameterType="com.ruoyi.fishing.domain.FishPointsReward">
+        insert ignore into fish_points_reward
+            (user_id, source_type, source_no, amount_cents, points, status, create_time)
+        values
+            (#{userId}, #{sourceType}, #{sourceNo}, #{amountCents}, #{points}, 0, sysdate())
+    </insert>
+
+    <select id="selectRewardBySource" resultType="com.ruoyi.fishing.domain.FishPointsReward">
+        select reward_id as rewardId, user_id as userId, source_type as sourceType,
+               source_no as sourceNo, amount_cents as amountCents, points,
+               status, claimed_time as claimedTime, create_time as createTime
+        from fish_points_reward
+        where user_id = #{userId} and source_no = #{sourceNo}
+        limit 1
+    </select>
+
+    <update id="claimReward">
+        update fish_points_reward
+        set status = 1, claimed_time = sysdate()
+        where reward_id = #{rewardId} and status = 0
+    </update>
+
     <!-- 签到 -->
     <insert id="insertCheckin">
         insert ignore into fish_checkin (user_id, checkin_date, points_earned, create_time)

@@ -21,10 +21,12 @@ import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.fishing.domain.FishOrder;
 import com.ruoyi.fishing.domain.FishQrcode;
+import com.ruoyi.fishing.domain.FishSpot;
 import com.ruoyi.fishing.domain.FishVenue;
 import com.ruoyi.fishing.mapper.FishQrcodeMapper;
 import com.ruoyi.fishing.service.AppTokenService;
 import com.ruoyi.fishing.service.IFishOrderService;
+import com.ruoyi.fishing.service.IFishSpotService;
 import com.ruoyi.fishing.service.IFishVenueService;
 
 public class AppApiControllerQrcodeTest
@@ -35,6 +37,7 @@ public class AppApiControllerQrcodeTest
     private AppApiController controller;
     private IFishOrderService orderService;
     private IFishVenueService venueService;
+    private IFishSpotService spotService;
     private FishQrcodeMapper qrcodeMapper;
 
     @Before
@@ -43,12 +46,14 @@ public class AppApiControllerQrcodeTest
         controller = new AppApiController();
         orderService = mock(IFishOrderService.class);
         venueService = mock(IFishVenueService.class);
+        spotService = mock(IFishSpotService.class);
         qrcodeMapper = mock(FishQrcodeMapper.class);
         AppTokenService tokenService = mock(AppTokenService.class);
         HttpServletRequest request = mock(HttpServletRequest.class);
 
         setField("orderService", orderService);
         setField("venueService", venueService);
+        setField("spotService", spotService);
         setField("qrcodeMapper", qrcodeMapper);
         setField("appTokenService", tokenService);
         setField("request", request);
@@ -64,12 +69,12 @@ public class AppApiControllerQrcodeTest
         when(venueService.selectFishVenueList(any(FishVenue.class)))
                 .thenReturn(Collections.singletonList(venue));
         FishOrder started = runningOrder(VENUE_ID);
-        when(orderService.startOrder(USER_ID, VENUE_ID)).thenReturn(started);
+        when(orderService.startOrder(USER_ID, VENUE_ID, null)).thenReturn(started);
 
         AjaxResult result = controller.startOrder(Collections.<String, Object>emptyMap());
 
         assertSame(started, result.get(AjaxResult.DATA_TAG));
-        verify(orderService).startOrder(USER_ID, VENUE_ID);
+        verify(orderService).startOrder(USER_ID, VENUE_ID, null);
         verify(qrcodeMapper, never()).selectFishQrcodeByQrId(any(Long.class));
     }
 
@@ -117,6 +122,30 @@ public class AppApiControllerQrcodeTest
     }
 
     @Test
+    public void spotQrStartsOrderWithBoundSpot()
+    {
+        Long spotId = 20L;
+        FishQrcode qr = qrcode(36L, VENUE_ID, FishQrcode.TYPE_COMMON);
+        qr.setSceneValue("action=common&venueId=" + VENUE_ID + "&spotId=" + spotId);
+        FishSpot spot = new FishSpot();
+        spot.setSpotId(spotId);
+        spot.setVenueId(VENUE_ID);
+        spot.setSpotName("20号钓位");
+        spot.setStatus("0");
+        FishOrder started = runningOrder(VENUE_ID);
+        started.setSpotId(spotId);
+
+        when(qrcodeMapper.selectFishQrcodeByQrId(36L)).thenReturn(qr);
+        when(spotService.selectById(spotId)).thenReturn(spot);
+        when(orderService.startOrder(USER_ID, VENUE_ID, spotId)).thenReturn(started);
+
+        AjaxResult result = controller.startOrder(qrBody(36L));
+
+        assertSame(started, result.get(AjaxResult.DATA_TAG));
+        verify(orderService).startOrder(USER_ID, VENUE_ID, spotId);
+    }
+
+    @Test
     public void legacyStartQrCanFinishSameVenue()
     {
         FishQrcode qr = qrcode(33L, VENUE_ID, FishQrcode.TYPE_START);
@@ -141,7 +170,7 @@ public class AppApiControllerQrcodeTest
         ServiceException error = assertServiceException(() -> controller.startOrder(qrBody(34L)));
 
         assertTrue(error.getMessage().contains("离场码"));
-        verify(orderService, never()).startOrder(any(Long.class), any(Long.class));
+        verify(orderService, never()).startOrder(any(Long.class), any(Long.class), any(Long.class));
     }
 
     @Test

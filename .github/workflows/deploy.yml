@@ -156,12 +156,18 @@ jobs:
           mvn -B clean package
           test -f "ruoyi-admin/target/${JAR_NAME}"
 
-          MIGRATION_FILE="${RELEASE_DIR}/sql/migration-2026-07-12-app-bugfixes.sql"
+          MIGRATION_FILES=(
+            "${RELEASE_DIR}/sql/migration-2026-07-12-app-bugfixes.sql"
+            "${RELEASE_DIR}/sql/migration-2026-07-28-fish-card-game.sql"
+            "${RELEASE_DIR}/sql/migration-2026-08-01-visible-content.sql"
+          )
           ENV_FILE="${DEPLOY_DIR}/.env.production"
-          if [ ! -f "${MIGRATION_FILE}" ]; then
-            echo "Database migration file is missing: ${MIGRATION_FILE}"
-            exit 1
-          fi
+          for migration_file in "${MIGRATION_FILES[@]}"; do
+            if [ ! -f "${migration_file}" ]; then
+              echo "Database migration file is missing: ${migration_file}"
+              exit 1
+            fi
+          done
           if [ ! -f "${ENV_FILE}" ]; then
             echo "Database migration requires ${ENV_FILE} with DB_HOST, DB_PORT, DB_NAME, DB_USER and DB_PASSWORD."
             exit 1
@@ -197,16 +203,65 @@ jobs:
             exit 1
           fi
 
-          echo "Applying idempotent database migration before replacing the running jar."
-          MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_CLIENT}" \
+          MYSQL_DUMP="$(command -v mysqldump || command -v mariadb-dump || true)"
+          if [ -z "${MYSQL_DUMP}" ]; then
+            echo "Database backup cannot run: install mysqldump or mariadb-dump on the server."
+            exit 1
+          fi
+
+          BACKUP_DIR="${DEPLOY_DIR}/backups/database"
+          BACKUP_FILE="${BACKUP_DIR}/${DB_NAME}-${BACKUP_SUFFIX}.sql.gz"
+          mkdir -p "${BACKUP_DIR}"
+          echo "Backing up the production database to ${BACKUP_FILE}."
+          MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_DUMP}" \
             --protocol=TCP \
             --host="${DB_HOST}" \
             --port="${DB_PORT}" \
             --user="${DB_USER}" \
             --default-character-set=utf8mb4 \
-            "${DB_NAME}" < "${MIGRATION_FILE}"
+            --single-transaction \
+            --quick \
+            --skip-lock-tables \
+            --no-tablespaces \
+            "${DB_NAME}" | gzip -9 > "${BACKUP_FILE}"
+          test -s "${BACKUP_FILE}"
+
+          echo "Applying idempotent database migrations before replacing the running jar."
+          for migration_file in "${MIGRATION_FILES[@]}"; do
+            echo "Applying $(basename "${migration_file}")."
+            MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_CLIENT}" \
+              --protocol=TCP \
+              --host="${DB_HOST}" \
+              --port="${DB_PORT}" \
+              --user="${DB_USER}" \
+              --default-character-set=utf8mb4 \
+              "${DB_NAME}" < "${migration_file}"
+          done
+
+          mysql_scalar() {
+            MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_CLIENT}" \
+              --protocol=TCP \
+              --host="${DB_HOST}" \
+              --port="${DB_PORT}" \
+              --user="${DB_USER}" \
+              --default-character-set=utf8mb4 \
+              --batch --skip-column-names \
+              "${DB_NAME}" -e "$1"
+          }
+
+          SPOT_COUNT="$(mysql_scalar "select count(*) from fish_spot where venue_id = 1 and status = '0' and del_flag = '0'")"
+          QRCODE_COUNT="$(mysql_scalar "select count(*) from fish_qrcode where venue_id = 1 and qr_type = 'common' and scene_value like '%spotId=%' and status = '0'")"
+          COMPETITION_COUNT="$(mysql_scalar "select count(*) from fish_competition where status in (0, 1)")"
+          CAMPAIGN_COUNT="$(mysql_scalar "select count(*) from fish_card_campaign where status = '0'")"
+          SPECIES_COUNT="$(mysql_scalar "select count(*) from fish_card_species where status = '0'")"
+          echo "Seed verification: spots=${SPOT_COUNT}, spot_qrcodes=${QRCODE_COUNT}, competitions=${COMPETITION_COUNT}, fish_card_campaigns=${CAMPAIGN_COUNT}, fish_card_species=${SPECIES_COUNT}."
+          test "${SPOT_COUNT}" -ge 20
+          test "${QRCODE_COUNT}" -ge 20
+          test "${COMPETITION_COUNT}" -ge 1
+          test "${CAMPAIGN_COUNT}" -ge 1
+          test "${SPECIES_COUNT}" -ge 10
           unset DB_PASSWORD MYSQL_PWD
-          echo "Database migration completed."
+          echo "Database backup, migrations and seed verification completed."
 
           run_systemctl() {
             if [ "$(id -u)" -eq 0 ]; then

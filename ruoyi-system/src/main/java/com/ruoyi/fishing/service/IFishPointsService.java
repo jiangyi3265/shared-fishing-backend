@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import com.ruoyi.fishing.domain.FishPointsGoods;
 import com.ruoyi.fishing.domain.FishPointsExchange;
+import com.ruoyi.fishing.domain.FishPointsReward;
 
 public interface IFishPointsService
 {
@@ -32,6 +33,8 @@ public interface IFishPointsService
     Map<String, Object> checkin(Long userId);
     Map<String, Object> checkinCalendar(Long userId, String month);
 
-    // 消费赠积分(每消费1元=1积分)
-    void grantConsumePoints(Long userId, int amountCents, String orderNo);
+    // 线上消费赠积分（每实付1元=5积分，支付成功后生成，用户主动领取）
+    FishPointsReward prepareConsumeReward(Long userId, int amountCents, String sourceType, String sourceNo);
+    FishPointsReward getConsumeReward(Long userId, String sourceNo);
+    Map<String, Object> claimConsumeReward(Long userId, String sourceNo);
 }

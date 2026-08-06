@@ -7,6 +7,7 @@
         <result property="orderNo"         column="order_no"/>
         <result property="userId"          column="user_id"/>
         <result property="venueId"         column="venue_id"/>
+        <result property="spotId"          column="spot_id"/>
         <result property="status"          column="status"/>
         <result property="startTime"       column="start_time"/>
         <result property="endTime"         column="end_time"/>
@@ -27,18 +28,20 @@
         <result property="updateBy"        column="update_by"/>
         <result property="updateTime"      column="update_time"/>
         <result property="venueName"       column="venue_name"/>
+        <result property="spotName"        column="spot_name"/>
         <result property="nickname"        column="nickname"/>
     </resultMap>
 
     <sql id="selectFishOrderVo">
-        select o.order_id, o.order_no, o.user_id, o.venue_id, o.status, o.start_time, o.end_time,
+        select o.order_id, o.order_no, o.user_id, o.venue_id, o.spot_id, o.status, o.start_time, o.end_time,
                o.duration_seconds, o.elapsed_seconds, o.amount_cents, o.discount_cents, o.amount_paid,
                o.balance_cents,
                o.coupon_id, o.paid_time, o.pay_trade_no, o.rule_snapshot, o.mall_order_ids, o.cancel_reason,
                o.create_by, o.create_time, o.update_by, o.update_time,
-               v.name as venue_name, u.nickname as nickname
+               v.name as venue_name, s.spot_name as spot_name, u.nickname as nickname
         from fish_order o
         left join fish_venue v on o.venue_id = v.venue_id
+        left join fish_spot s on o.spot_id = s.spot_id
         left join fish_user  u on o.user_id  = u.user_id
     </sql>
 
@@ -48,6 +51,7 @@
             <if test="orderNo != null and orderNo != ''">AND o.order_no like concat('%', #{orderNo}, '%')</if>
             <if test="userId != null">AND o.user_id = #{userId}</if>
             <if test="venueId != null">AND o.venue_id = #{venueId}</if>
+            <if test="spotId != null">AND o.spot_id = #{spotId}</if>
             <if test="status != null">AND o.status = #{status}</if>
             <if test="params.beginTime != null and params.beginTime != ''">
                 AND o.create_time &gt;= #{params.beginTime}
@@ -99,7 +103,7 @@
     <insert id="insertFishOrder" parameterType="com.ruoyi.fishing.domain.FishOrder" useGeneratedKeys="true" keyProperty="orderId">
         insert into fish_order
         <trim prefix="(" suffix=")" suffixOverrides=",">
-            order_no, user_id, venue_id, status,
+            order_no, user_id, venue_id, spot_id, status,
             <if test="startTime != null">start_time,</if>
             <if test="endTime != null">end_time,</if>
             <if test="durationSeconds != null">duration_seconds,</if>
@@ -112,7 +116,7 @@
             create_time
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
-            #{orderNo}, #{userId}, #{venueId}, #{status},
+            #{orderNo}, #{userId}, #{venueId}, #{spotId}, #{status},
             <if test="startTime != null">#{startTime},</if>
             <if test="endTime != null">#{endTime},</if>
             <if test="durationSeconds != null">#{durationSeconds},</if>
@@ -130,6 +134,7 @@
         update fish_order
         <trim prefix="SET" suffixOverrides=",">
             <if test="status != null">status = #{status},</if>
+            <if test="spotId != null">spot_id = #{spotId},</if>
             <if test="startTime != null">start_time = #{startTime},</if>
             <if test="endTime != null">end_time = #{endTime},</if>
             <if test="durationSeconds != null">duration_seconds = #{durationSeconds},</if>

@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.fishing.mapper.FishCardGameMapper">
+
+    <sql id="campaignColumns">
+        campaign_id as campaignId, venue_id as venueId, title, subtitle, rules,
+        start_time as startTime, end_time as endTime, reward_cents as rewardCents,
+        status, create_time as createTime
+    </sql>
+
+    <select id="selectActiveCampaign" resultType="java.util.HashMap">
+        select <include refid="campaignColumns"/>
+        from fish_card_campaign
+        where status = '0' and end_time &gt;= sysdate()
+        order by case when start_time &lt;= sysdate() then 0 else 1 end, start_time asc
+        limit 1
+    </select>
+
+    <select id="selectCampaignById" resultType="java.util.HashMap">
+        select <include refid="campaignColumns"/>
+        from fish_card_campaign where campaign_id = #{campaignId}
+    </select>
+
+    <select id="selectSpecies" resultType="java.util.HashMap">
+        select species_id as speciesId, campaign_id as campaignId, species_name as speciesName,
+               card_image as cardImage, sort_num as sortNum, status
+        from fish_card_species
+        where campaign_id = #{campaignId} and status = '0'
+        order by sort_num asc, species_id asc
+    </select>
+
+    <select id="selectSpeciesById" resultType="java.util.HashMap">
+        select species_id as speciesId, campaign_id as campaignId, species_name as speciesName,
+               card_image as cardImage, sort_num as sortNum, status
+        from fish_card_species
+        where campaign_id = #{campaignId} and species_id = #{speciesId} and status = '0'
+        limit 1
+    </select>
+
+    <select id="selectOpenRound" resultType="java.util.HashMap">
+        select round_id as roundId, campaign_id as campaignId, user_id as userId,
+               round_no as roundNo, status, started_time as startedTime,
+               completed_time as completedTime, duration_seconds as durationSeconds,
+               reward_cents as rewardCents, reward_status as rewardStatus,
+               reward_paid_time as rewardPaidTime
+        from fish_card_round
+        where campaign_id = #{campaignId} and user_id = #{userId} and status = 0
+        order by round_no desc limit 1
+    </select>
+
+    <select id="selectRoundById" resultType="java.util.HashMap">
+        select round_id as roundId, campaign_id as campaignId, user_id as userId,
+               round_no as roundNo, status, started_time as startedTime,
+               completed_time as completedTime, duration_seconds as durationSeconds,
+               reward_cents as rewardCents, reward_status as rewardStatus,
+               reward_paid_time as rewardPaidTime
+        from fish_card_round where round_id = #{roundId}
+    </select>
+
+    <select id="selectMaxRoundNo" resultType="int">
+        select coalesce(max(round_no), 0)
+        from fish_card_round where campaign_id = #{campaignId} and user_id = #{userId}
+    </select>
+
+    <insert id="insertRound">
+        insert into fish_card_round
+            (campaign_id, user_id, round_no, status, started_time, reward_cents,
+             reward_status, create_time)
+        values
+            (#{campaignId}, #{userId}, #{roundNo}, 0, sysdate(), #{rewardCents}, 0, sysdate())
+    </insert>
+
+    <select id="selectProgress" resultType="java.util.HashMap">
+        select progress_id as progressId, round_id as roundId, species_id as speciesId,
+               catch_id as catchId, status, submitted_time as submittedTime,
+               reviewed_time as reviewedTime
+        from fish_card_progress
+        where round_id = #{roundId} and species_id = #{speciesId}
+        limit 1
+    </select>
+
+    <select id="selectProgressByCatch" resultType="java.util.HashMap">
+        select progress_id as progressId, round_id as roundId, species_id as speciesId,
+               catch_id as catchId, status, submitted_time as submittedTime,
+               reviewed_time as reviewedTime
+        from fish_card_progress where catch_id = #{catchId} limit 1
+    </select>
+
+    <select id="selectProgressList" resultType="java.util.HashMap">
+        select p.progress_id as progressId, p.round_id as roundId, p.species_id as speciesId,
+               p.catch_id as catchId, p.status, p.submitted_time as submittedTime,
+               p.reviewed_time as reviewedTime, c.video_url as videoUrl,
+               c.reject_reason as rejectReason
+        from fish_card_progress p
+        left join fish_catch_record c on c.catch_id = p.catch_id
+        where p.round_id = #{roundId}
+    </select>
+
+    <insert id="upsertProgress">
+        insert into fish_card_progress
+            (round_id, species_id, catch_id, status, submitted_time, create_time)
+        values
+            (#{roundId}, #{speciesId}, #{catchId}, 0, sysdate(), sysdate())
+        on duplicate key update
+            catch_id = values(catch_id), status = 0, submitted_time = sysdate(),
+            reviewed_time = null, update_time = sysdate()
+    </insert>
+
+    <update id="updateProgressByCatch">
+        update fish_card_progress
+        set status = #{status}, reviewed_time = sysdate(), update_time = sysdate()
+        where catch_id = #{catchId} and status = 0
+    </update>
+
+    <select id="countApproved" resultType="int">
+        select count(*) from fish_card_progress where round_id = #{roundId} and status = 1
+    </select>
+
+    <update id="completeRound">
+        update fish_card_round
+        set status = 1, completed_time = sysdate(),
+            duration_seconds = timestampdiff(second, started_time, sysdate()),
+            update_time = sysdate()
+        where round_id = #{roundId} and status = 0
+    </update>
+
+    <select id="selectRanking" resultType="java.util.HashMap">
+        select r.user_id as userId, u.nickname, u.avatar,
+               count(*) as completedRounds, min(r.duration_seconds) as bestDurationSeconds,
+               min(r.completed_time) as firstCompletedTime
+        from fish_card_round r
+        left join fish_user u on u.user_id = r.user_id
+        where r.campaign_id = #{campaignId} and r.status = 1
+        group by r.user_id, u.nickname, u.avatar
+        order by bestDurationSeconds asc, firstCompletedTime asc
+        limit 6
+    </select>
+
+    <select id="selectAdminRounds" resultType="java.util.HashMap">
+        select r.round_id as roundId, r.campaign_id as campaignId, c.title,
+               r.user_id as userId, u.nickname, u.avatar, r.round_no as roundNo,
+               r.status, r.started_time as startedTime, r.completed_time as completedTime,
+               r.duration_seconds as durationSeconds, r.reward_cents as rewardCents,
+               r.reward_status as rewardStatus, r.reward_paid_time as rewardPaidTime,
+               r.reward_paid_by as rewardPaidBy
+        from fish_card_round r
+        left join fish_card_campaign c on c.campaign_id = r.campaign_id
+        left join fish_user u on u.user_id = r.user_id
+        <where>
+            <if test="campaignId != null">r.campaign_id = #{campaignId}</if>
+            <if test="rewardStatus != null">and r.reward_status = #{rewardStatus}</if>
+            <if test="nickname != null and nickname != ''">
+                and u.nickname like concat('%', #{nickname}, '%')
+            </if>
+        </where>
+        order by r.completed_time desc, r.create_time desc
+    </select>
+
+    <update id="markRewardPaid">
+        update fish_card_round
+        set reward_status = 1, reward_paid_time = sysdate(),
+            reward_paid_by = #{operator}, update_time = sysdate()
+        where round_id = #{roundId} and status = 1 and reward_status = 0
+    </update>
+</mapper>

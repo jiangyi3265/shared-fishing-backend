@@ -461,6 +461,7 @@ CREATE TABLE `fish_order` (
   `order_no`         VARCHAR(40)  NOT NULL                COMMENT '订单号',
   `user_id`          BIGINT(20)   NOT NULL                COMMENT '用户ID',
   `venue_id`         BIGINT(20)   NOT NULL                COMMENT '钓场ID',
+  `spot_id`          BIGINT(20)   DEFAULT NULL            COMMENT '计时钓位ID',
   `status`           TINYINT(2)   DEFAULT 1               COMMENT '状态(0待支付 1计时中 2待结算 3已完成 4已取消)',
   `start_time`       DATETIME     DEFAULT NULL            COMMENT '开始时间',
   `end_time`         DATETIME     DEFAULT NULL            COMMENT '结束时间',
@@ -482,6 +483,7 @@ CREATE TABLE `fish_order` (
   UNIQUE KEY `uk_order_no` (`order_no`),
   KEY `idx_user_status` (`user_id`, `status`),
   KEY `idx_venue` (`venue_id`),
+  KEY `idx_spot_status` (`spot_id`, `status`),
   KEY `idx_create_time` (`create_time`),
   KEY `idx_paid_time` (`paid_time`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 COMMENT='钓场订单';
@@ -1091,6 +1093,41 @@ create table fish_spot (
   key idx_venue (venue_id)
 ) engine=innodb default charset=utf8mb4 comment '钓位';
 
+-- 默认圆形鱼塘 20 个钓位
+insert into fish_spot
+  (venue_id, spot_name, spot_type, extra_fee_cents, capacity, sort_num, status, description, del_flag, create_by, create_time)
+values
+  (1, '01号钓位', 'normal', 0, 1, 1,  '0', '北岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '02号钓位', 'normal', 0, 1, 2,  '0', '北岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '03号钓位', 'normal', 0, 1, 3,  '0', '北岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '04号钓位', 'normal', 0, 1, 4,  '0', '北岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '05号钓位', 'normal', 0, 1, 5,  '0', '北岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '06号钓位', 'normal', 0, 1, 6,  '0', '东北岸标准钓位', '0', 'admin', sysdate()),
+  (1, '07号钓位', 'normal', 0, 1, 7,  '0', '东岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '08号钓位', 'normal', 0, 1, 8,  '0', '东岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '09号钓位', 'normal', 0, 1, 9,  '0', '东岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '10号钓位', 'normal', 0, 1, 10, '0', '东南岸标准钓位', '0', 'admin', sysdate()),
+  (1, '11号钓位', 'normal', 0, 1, 11, '0', '南岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '12号钓位', 'normal', 0, 1, 12, '0', '南岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '13号钓位', 'normal', 0, 1, 13, '0', '南岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '14号钓位', 'normal', 0, 1, 14, '0', '南岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '15号钓位', 'normal', 0, 1, 15, '0', '西南岸标准钓位', '0', 'admin', sysdate()),
+  (1, '16号钓位', 'normal', 0, 1, 16, '0', '西岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '17号钓位', 'normal', 0, 1, 17, '0', '西岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '18号钓位', 'normal', 0, 1, 18, '0', '西岸标准钓位',   '0', 'admin', sysdate()),
+  (1, '19号钓位', 'normal', 0, 1, 19, '0', '西北岸标准钓位', '0', 'admin', sysdate()),
+  (1, '20号钓位', 'normal', 0, 1, 20, '0', '西北岸标准钓位', '0', 'admin', sysdate());
+
+-- 每个钓位一张独立通用码；生成小程序码时会使用该记录唯一 qr_id。
+insert into fish_qrcode (venue_id, qr_type, scene_value, remark, status, create_by, create_time)
+select s.venue_id,
+       'common',
+       concat('action=common&venueId=', s.venue_id, '&spotId=', s.spot_id),
+       concat(s.spot_name, '专属码'),
+       '0', 'admin', sysdate()
+from fish_spot s
+where s.venue_id = 1 and s.del_flag = '0';
+
 drop table if exists fish_reservation;
 create table fish_reservation (
   reservation_id  bigint(20)   not null auto_increment,
@@ -1153,8 +1190,11 @@ create table fish_catch_record (
   weight_jin    decimal(10,2) default 0 comment '渔获重量(斤)',
   fish_count    int(11)      default 0 comment '尾数',
   images        varchar(1000) default '' comment '图片URL,逗号分隔(最多3张)',
+  video_url     varchar(500) default '' comment '钓获及放流认证视频',
   content       varchar(500) default '' comment '心得/描述',
   fishing_method varchar(60) default '' comment '钓法(台钓/路亚/筏钓等)',
+  card_round_id bigint(20)   null comment '电子鱼卡轮次',
+  card_species_id bigint(20) null comment '电子鱼卡鱼种',
   is_featured   tinyint(1)   not null default 0 comment '0普通 1精选(首页展示)',
   like_count    int(11)      not null default 0,
   status        tinyint(2)   not null default 0 comment '0待审核 1已通过 2已拒绝',
@@ -1167,6 +1207,8 @@ create table fish_catch_record (
   primary key (catch_id),
   key idx_user (user_id),
   key idx_venue (venue_id),
+  key idx_card_round (card_round_id),
+  key idx_card_species (card_species_id),
   key idx_featured (is_featured, status, create_time)
 ) engine=innodb default charset=utf8mb4 comment '钓获打卡';
 
@@ -1559,6 +1601,128 @@ create table fish_catch_comment (
 alter table fish_catch_record add column comment_count int(11) not null default 0 after like_count;
 
 -- END SOURCE: fishing-catch-comment.sql
+
+-- ============================================================
+-- BEGIN SOURCE: fishing-card-game.sql
+-- ============================================================
+
+drop table if exists fish_points_reward;
+create table fish_points_reward (
+  reward_id bigint(20) not null auto_increment,
+  user_id bigint(20) not null,
+  source_type varchar(30) not null,
+  source_no varchar(64) not null,
+  amount_cents int(11) not null,
+  points int(11) not null,
+  status tinyint(2) not null default 0,
+  claimed_time datetime null,
+  create_time datetime default current_timestamp,
+  primary key (reward_id),
+  unique key uk_points_reward_source (source_no),
+  key idx_points_reward_user (user_id, status, create_time)
+) engine=innodb default charset=utf8mb4 comment '线上消费积分待领取奖励';
+
+drop table if exists fish_card_progress;
+drop table if exists fish_card_round;
+drop table if exists fish_card_species;
+drop table if exists fish_card_campaign;
+create table fish_card_campaign (
+  campaign_id bigint(20) not null auto_increment,
+  campaign_key varchar(80) not null,
+  venue_id bigint(20) null,
+  title varchar(120) not null,
+  subtitle varchar(200) default '',
+  rules varchar(1000) default '',
+  start_time datetime not null,
+  end_time datetime not null,
+  reward_cents int(11) not null default 6600,
+  status char(1) not null default '0',
+  create_time datetime default current_timestamp,
+  update_time datetime null,
+  primary key (campaign_id),
+  unique key uk_card_campaign_key (campaign_key),
+  key idx_card_campaign_time (status, start_time, end_time)
+) engine=innodb default charset=utf8mb4 comment '电子鱼卡活动';
+
+create table fish_card_species (
+  species_id bigint(20) not null auto_increment,
+  campaign_id bigint(20) not null,
+  species_name varchar(80) not null,
+  card_image varchar(500) default '',
+  sort_num int(11) not null default 0,
+  status char(1) not null default '0',
+  create_time datetime default current_timestamp,
+  primary key (species_id),
+  unique key uk_card_species (campaign_id, species_name),
+  key idx_card_species_sort (campaign_id, status, sort_num)
+) engine=innodb default charset=utf8mb4 comment '电子鱼卡鱼种';
+
+create table fish_card_round (
+  round_id bigint(20) not null auto_increment,
+  campaign_id bigint(20) not null,
+  user_id bigint(20) not null,
+  round_no int(11) not null,
+  status tinyint(2) not null default 0,
+  started_time datetime not null,
+  completed_time datetime null,
+  duration_seconds int(11) null,
+  reward_cents int(11) not null default 6600,
+  reward_status tinyint(2) not null default 0,
+  reward_paid_time datetime null,
+  reward_paid_by varchar(64) default '',
+  create_time datetime default current_timestamp,
+  update_time datetime null,
+  primary key (round_id),
+  unique key uk_card_round (campaign_id, user_id, round_no),
+  key idx_card_round_open (campaign_id, user_id, status),
+  key idx_card_ranking (campaign_id, status, duration_seconds),
+  key idx_card_reward (status, reward_status, completed_time)
+) engine=innodb default charset=utf8mb4 comment '用户电子鱼卡收集轮次';
+
+create table fish_card_progress (
+  progress_id bigint(20) not null auto_increment,
+  round_id bigint(20) not null,
+  species_id bigint(20) not null,
+  catch_id bigint(20) not null,
+  status tinyint(2) not null default 0,
+  submitted_time datetime not null,
+  reviewed_time datetime null,
+  create_time datetime default current_timestamp,
+  update_time datetime null,
+  primary key (progress_id),
+  unique key uk_card_progress (round_id, species_id),
+  unique key uk_card_progress_catch (catch_id),
+  key idx_card_progress_status (round_id, status)
+) engine=innodb default charset=utf8mb4 comment '电子鱼卡收集进度';
+
+insert into fish_card_campaign
+  (campaign_key, venue_id, title, subtitle, rules, start_time, end_time, reward_cents, status)
+values
+  ('smart-fish-atlas-longshuihu-2026', 1, '极智鱼鉴 · 龙水湖篇',
+   '集齐 10 张鱼卡，单轮奖励 66 元，可无限刷新',
+   '清晰拍摄钓获、说出鱼种，并记录完整放回鱼塘过程；后台审核通过后鱼卡点亮。',
+   '2026-08-01 00:00:00', '2026-10-30 23:59:59', 6600, '0');
+set @fish_card_campaign_id := last_insert_id();
+insert into fish_card_species (campaign_id, species_name, card_image, sort_num, status) values
+(@fish_card_campaign_id, '鲤鱼',   '/static/fish-card-atlas.png', 1,  '0'),
+(@fish_card_campaign_id, '草鱼',   '/static/fish-card-atlas.png', 2,  '0'),
+(@fish_card_campaign_id, '花鲢',   '/static/fish-card-atlas.png', 3,  '0'),
+(@fish_card_campaign_id, '黄辣丁', '/static/fish-card-atlas.png', 4,  '0'),
+(@fish_card_campaign_id, '鳊鱼',   '/static/fish-card-atlas.png', 5,  '0'),
+(@fish_card_campaign_id, '鲈鱼',   '/static/fish-card-atlas.png', 6,  '0'),
+(@fish_card_campaign_id, '翘嘴',   '/static/fish-card-atlas.png', 7,  '0'),
+(@fish_card_campaign_id, '鳜鱼',   '/static/fish-card-atlas.png', 8,  '0'),
+(@fish_card_campaign_id, '青鱼',   '/static/fish-card-atlas.png', 9,  '0'),
+(@fish_card_campaign_id, '黑鱼',   '/static/fish-card-atlas.png', 10, '0');
+
+set @fish_parent := (select menu_id from sys_menu where menu_name = '钓场管理' limit 1);
+insert into sys_menu (menu_name, parent_id, order_num, path, component, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, update_by, update_time, remark)
+values ('鱼鉴奖励', @fish_parent, 37, 'fishCard', 'fishing/fishCard/index', 1, 0, 'C', '0', '0', 'fishing:fishCard:list', 'star', 'admin', sysdate(), '', null, '电子鱼卡集齐与奖励发放');
+set @fish_card_menu := last_insert_id();
+insert into sys_menu (menu_name, parent_id, order_num, path, component, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, update_by, update_time, remark)
+values ('奖励发放', @fish_card_menu, 1, '#', '', 1, 0, 'F', '0', '0', 'fishing:fishCard:pay', '#', 'admin', sysdate(), '', null, '');
+
+-- END SOURCE: fishing-card-game.sql
 
 SET FOREIGN_KEY_CHECKS = 1;
 

@@ -25,6 +25,9 @@ public class FishOrder extends BaseEntity
     @Excel(name = "钓场ID")
     private Long venueId;
 
+    @Excel(name = "钓位ID")
+    private Long spotId;
+
     /** 0待支付 1计时中 2待结算 3已完成 4已取消 */
     @Excel(name = "状态", readConverterExp = "0=待支付,1=计时中,2=待结算,3=已完成,4=已取消")
     private Integer status;
@@ -60,6 +63,7 @@ public class FishOrder extends BaseEntity
     private String cancelReason;
 
     private String venueName;
+    private String spotName;
     private String nickname;
 
     public Long getOrderId() { return orderId; }
@@ -70,6 +74,8 @@ public class FishOrder extends BaseEntity
     public void setUserId(Long userId) { this.userId = userId; }
     public Long getVenueId() { return venueId; }
     public void setVenueId(Long venueId) { this.venueId = venueId; }
+    public Long getSpotId() { return spotId; }
+    public void setSpotId(Long spotId) { this.spotId = spotId; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
     public Date getStartTime() { return startTime; }
@@ -102,6 +108,8 @@ public class FishOrder extends BaseEntity
     public void setCancelReason(String cancelReason) { this.cancelReason = cancelReason; }
     public String getVenueName() { return venueName; }
     public void setVenueName(String venueName) { this.venueName = venueName; }
+    public String getSpotName() { return spotName; }
+    public void setSpotName(String spotName) { this.spotName = spotName; }
     public String getNickname() { return nickname; }
     public void setNickname(String nickname) { this.nickname = nickname; }
 
@@ -109,7 +117,7 @@ public class FishOrder extends BaseEntity
     public String toString() {
         return new ToStringBuilder(this, ToStringStyle.MULTI_LINE_STYLE)
             .append("orderId", orderId).append("orderNo", orderNo).append("userId", userId)
-            .append("venueId", venueId).append("status", status).append("startTime", startTime)
+            .append("venueId", venueId).append("spotId", spotId).append("status", status).append("startTime", startTime)
             .append("endTime", endTime).append("amountCents", amountCents).toString();
     }
 }

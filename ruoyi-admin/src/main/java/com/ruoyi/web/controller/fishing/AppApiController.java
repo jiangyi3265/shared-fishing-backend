@@ -6,13 +6,18 @@ import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import com.ruoyi.common.annotation.Anonymous;
+import com.ruoyi.common.config.RuoYiConfig;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.exception.ServiceException;
+import com.ruoyi.common.utils.file.FileUploadUtils;
+import com.ruoyi.common.utils.file.MimeTypeUtils;
 import com.ruoyi.fishing.domain.FishAd;
 import com.ruoyi.fishing.domain.FishOrder;
 import com.ruoyi.fishing.domain.FishQrcode;
 import com.ruoyi.fishing.domain.FishRegistration;
+import com.ruoyi.fishing.domain.FishSpot;
 import com.ruoyi.fishing.domain.FishUser;
 import com.ruoyi.fishing.domain.FishUserCoupon;
 import com.ruoyi.fishing.domain.FishVenue;
@@ -34,6 +39,7 @@ import com.ruoyi.fishing.service.IFishRegistrationService;
 import com.ruoyi.fishing.service.IFishStockingService;
 import com.ruoyi.fishing.service.IFishSpotService;
 import com.ruoyi.fishing.service.IFishCatchService;
+import com.ruoyi.fishing.service.IFishCardGameService;
 import com.ruoyi.fishing.service.IFishMemberLevelService;
 import com.ruoyi.fishing.service.IWeatherService;
 import com.ruoyi.fishing.service.IFishPointsService;
@@ -84,6 +90,8 @@ public class AppApiController
     @Autowired
     private IFishCatchService catchService;
     @Autowired
+    private IFishCardGameService cardGameService;
+    @Autowired
     private IFishMemberLevelService memberLevelService;
     @Autowired
     private IWeatherService weatherService;
@@ -118,6 +126,37 @@ public class AppApiController
         data.put("userId", u.getUserId());
         data.put("user", u);
         data.put("token", appTokenService.createToken(u.getUserId()));
+        return AjaxResult.success(data);
+    }
+
+    /** 用户主动选择微信头像后上传。头像临时路径不能直接保存，必须落到服务端。 */
+    @PostMapping("/profile/avatar")
+    public AjaxResult uploadAvatar(@RequestParam("file") MultipartFile file) throws Exception
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        String avatar = FileUploadUtils.upload(RuoYiConfig.getAvatarPath(), file,
+                MimeTypeUtils.IMAGE_EXTENSION, true);
+        FishUser update = new FishUser();
+        update.setUserId(userId);
+        update.setAvatar(avatar);
+        userService.updateFishUser(update);
+        Map<String, Object> data = new HashMap<>();
+        data.put("avatar", avatar);
+        data.put("user", userService.selectFishUserByUserId(userId));
+        return AjaxResult.success(data);
+    }
+
+    /** 小程序业务媒体上传，使用小程序自己的 app token 校验。 */
+    @PostMapping("/media/upload")
+    public AjaxResult uploadMedia(@RequestParam("file") MultipartFile file) throws Exception
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        String fileName = FileUploadUtils.upload(RuoYiConfig.getUploadPath(), file,
+                new String[] { "bmp", "gif", "jpg", "jpeg", "png", "mp4", "avi", "rmvb" });
+        Map<String, Object> data = new HashMap<>();
+        data.put("fileName", fileName);
         return AjaxResult.success(data);
     }
 
@@ -194,6 +233,7 @@ public class AppApiController
 
         Long requestedVenueId = parseLong(bodyValue(body, "venueId"));
         Long venueId;
+        Long spotId = null;
         if (hasScanCredential(body))
         {
             FishQrcode qr = requireActiveQrcode(body);
@@ -204,6 +244,8 @@ public class AppApiController
                 throw new ServiceException("二维码与当前钓场不匹配");
             }
             venueId = qr.getVenueId();
+            FishSpot spot = requireBoundSpot(qr);
+            if (spot != null) spotId = spot.getSpotId();
         }
         else
         {
@@ -216,7 +258,11 @@ public class AppApiController
         {
             throw new ServiceException("当前已有其他钓场的计时订单");
         }
-        return AjaxResult.success(orderService.startOrder(userId, venueId));
+        if (running != null && running.getSpotId() != null && spotId != null && !spotId.equals(running.getSpotId()))
+        {
+            throw new ServiceException("请扫描当前计时钓位的二维码");
+        }
+        return AjaxResult.success(orderService.startOrder(userId, venueId, spotId));
     }
 
     /** 查询进行中订单（带实时费用） */
@@ -258,6 +304,11 @@ public class AppApiController
             if (running.getVenueId() == null || !qr.getVenueId().equals(running.getVenueId()))
             {
                 throw new ServiceException("二维码与当前订单钓场不匹配");
+            }
+            FishSpot spot = requireBoundSpot(qr);
+            if (spot != null && running.getSpotId() != null && !spot.getSpotId().equals(running.getSpotId()))
+            {
+                throw new ServiceException("请扫描当前计时钓位的二维码");
             }
         }
         else
@@ -377,6 +428,8 @@ public class AppApiController
         if ("1".equals(qr.getStatus())) return AjaxResult.error("二维码已停用");
         if (qr.getVenueId() == null) return AjaxResult.error("二维码未绑定钓场");
 
+        FishSpot spot = requireBoundSpot(qr);
+
         String action;
         Long userId = currentUserId();
         FishOrder running = userId == null ? null : orderService.selectRunningOrder(userId);
@@ -386,6 +439,10 @@ public class AppApiController
             if (running.getVenueId() == null || !qr.getVenueId().equals(running.getVenueId()))
             {
                 return AjaxResult.error("二维码与当前订单钓场不匹配");
+            }
+            if (spot != null && running.getSpotId() != null && !spot.getSpotId().equals(running.getSpotId()))
+            {
+                return AjaxResult.error("请扫描当前计时钓位的二维码");
             }
             action = "end";
         }
@@ -406,6 +463,8 @@ public class AppApiController
         Map<String, Object> data = new HashMap<>();
         data.put("qrId", qr.getQrId());
         data.put("venueId", qr.getVenueId());
+        data.put("spotId", spot == null ? null : spot.getSpotId());
+        data.put("spot", spot);
         data.put("action", action);
         return AjaxResult.success(data);
     }
@@ -872,6 +931,38 @@ public class AppApiController
         return list.isEmpty() ? null : list.get(0);
     }
 
+    /** 钓位码通过 scene_value 中的 spotId 绑定具体钓位。 */
+    private Long resolveSpotId(FishQrcode qr)
+    {
+        if (qr == null || qr.getSceneValue() == null) return null;
+        String sceneValue = qr.getSceneValue().trim();
+        if (sceneValue.isEmpty()) return null;
+        for (String part : sceneValue.split("&"))
+        {
+            int separator = part.indexOf('=');
+            if (separator <= 0) continue;
+            if ("spotId".equals(part.substring(0, separator)))
+            {
+                return parseLong(part.substring(separator + 1));
+            }
+        }
+        return null;
+    }
+
+    private FishSpot requireBoundSpot(FishQrcode qr)
+    {
+        Long spotId = resolveSpotId(qr);
+        if (spotId == null) return null;
+        FishSpot spot = spotService.selectById(spotId);
+        if (spot == null) throw new ServiceException("二维码绑定的钓位不存在");
+        if (!"0".equals(spot.getStatus())) throw new ServiceException("该钓位当前不可用");
+        if (spot.getVenueId() == null || !spot.getVenueId().equals(qr.getVenueId()))
+        {
+            throw new ServiceException("二维码绑定的钓位与钓场不匹配");
+        }
+        return spot;
+    }
+
     private Long parseLong(Object v)
     {
         if (v == null) return null;
@@ -997,6 +1088,27 @@ public class AppApiController
         return AjaxResult.success(catchService.addComment(catchId, userId, content, replyToId, replyToUser));
     }
 
+    // ===== 极智鱼鉴：电子鱼卡 =====
+
+    @GetMapping("/fish-card/my")
+    public AjaxResult fishCardGame()
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(cardGameService.getMyGame(userId));
+    }
+
+    @PostMapping("/fish-card/submit")
+    public AjaxResult submitFishCard(@RequestBody Map<String, Object> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        Long speciesId = parseLong(body.get("speciesId"));
+        String videoUrl = body.get("videoUrl") == null ? "" : String.valueOf(body.get("videoUrl"));
+        if (speciesId == null) return AjaxResult.error("请选择鱼种");
+        return AjaxResult.success(cardGameService.submit(userId, speciesId, videoUrl));
+    }
+
     // ===== 会员等级 =====
 
     @Anonymous
@@ -1062,6 +1174,24 @@ public class AppApiController
         Long userId = currentUserId();
         if (userId == null) return unauthorized();
         return AjaxResult.success(pointsService.exchange(userId, goodsId));
+    }
+
+    /** 查询某笔线上消费是否有待领取积分。 */
+    @GetMapping("/points/reward/{sourceNo}")
+    public AjaxResult pointsReward(@PathVariable String sourceNo)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(pointsService.getConsumeReward(userId, sourceNo));
+    }
+
+    /** 点击“收入囊中”领取；服务端状态守卫确保重复点击不会重复加分。 */
+    @PostMapping("/points/reward/{sourceNo}/claim")
+    public AjaxResult claimPointsReward(@PathVariable String sourceNo)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        return AjaxResult.success(pointsService.claimConsumeReward(userId, sourceNo));
     }
 
     // ===== 拼场约钓 =====

@@ -15,6 +15,7 @@ import com.ruoyi.fishing.domain.FishWeighOrder;
 import com.ruoyi.fishing.mapper.FishVenueMapper;
 import com.ruoyi.fishing.mapper.FishWeighOrderMapper;
 import com.ruoyi.fishing.service.IFishBalanceService;
+import com.ruoyi.fishing.service.IFishPointsService;
 import com.ruoyi.fishing.service.IFishWeighService;
 
 /**
@@ -26,6 +27,7 @@ public class FishWeighServiceImpl implements IFishWeighService
     @Autowired private FishWeighOrderMapper weighMapper;
     @Autowired private FishVenueMapper venueMapper;
     @Autowired private IFishBalanceService balanceService;
+    @Autowired private IFishPointsService pointsService;
 
     /** 1 斤 = 500 克 */
     private static final int GRAMS_PER_JIN = 500;
@@ -96,6 +98,11 @@ public class FishWeighServiceImpl implements IFishWeighService
         o.setPayTradeNo(tradeNo == null ? "" : tradeNo);
         o.setPaidTime(new Date());
         weighMapper.update(o);
+        if (o.getAmountCents() != null && o.getAmountCents() > 0)
+        {
+            pointsService.prepareConsumeReward(o.getUserId(), o.getAmountCents(),
+                    "weigh", o.getWeighNo());
+        }
         return o;
     }
 

@@ -83,7 +83,7 @@ public class FishOrderServiceImpl implements IFishOrderService
     @Override
     @Transactional
     @SuppressWarnings("unchecked")
-    public FishOrder startOrder(Long userId, Long venueId)
+    public FishOrder startOrder(Long userId, Long venueId, Long spotId)
     {
         userService.assertNotBlacklisted(userId);
 
@@ -112,6 +112,7 @@ public class FishOrderServiceImpl implements IFishOrderService
             o.setOrderNo("FD" + now.getTime() + String.format("%06d", ORDER_SEQ.incrementAndGet() % 1000000));
             o.setUserId(userId);
             o.setVenueId(venueId);
+            o.setSpotId(spotId);
             o.setStatus(1);
             o.setStartTime(now);
             o.setDurationSeconds(0);
@@ -209,6 +210,10 @@ public class FishOrderServiceImpl implements IFishOrderService
         }
         orderMapper.updateFishOrder(order);
         settleAttachedMallOrders(order, order.getPayTradeNo());
+        if (plan.wxAmountCents > 0) {
+            pointsService.prepareConsumeReward(userId, plan.wxAmountCents, "fishing", order.getOrderNo());
+        }
+        memberLevelService.refreshUserLevel(userId);
         return order;
     }
 
@@ -355,13 +360,15 @@ public class FishOrderServiceImpl implements IFishOrderService
         orderMapper.updateFishOrder(order);
         // 推进合并支付的商城订单
         settleAttachedMallOrders(order, tradeNo);
-        // 消费赠积分 + 刷新会员等级
+        // 线上实付生成待领取积分奖励；余额抵扣不计入本次规则
         try {
-            int totalPaid = (order.getAmountPaid() == null ? 0 : order.getAmountPaid()) + balanceToDeduct;
-            if (totalPaid > 0) pointsService.grantConsumePoints(order.getUserId(), totalPaid, order.getOrderNo());
+            int wxPaid = order.getAmountPaid() == null ? 0 : order.getAmountPaid();
+            if (wxPaid > 0) {
+                pointsService.prepareConsumeReward(order.getUserId(), wxPaid, "fishing", order.getOrderNo());
+            }
             memberLevelService.refreshUserLevel(order.getUserId());
         } catch (Exception e) {
-            log.warn("积分/等级刷新异常 orderNo={} err={}", orderNo, e.getMessage());
+            log.warn("积分奖励/等级刷新异常 orderNo={} err={}", orderNo, e.getMessage());
         }
         return order;
     }

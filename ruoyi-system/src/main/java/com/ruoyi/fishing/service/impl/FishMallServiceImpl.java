@@ -194,6 +194,11 @@ public class FishMallServiceImpl implements IFishMallService
         order.setPointsDeductCents(pointsCents);
         order.setPayTradeNo(tradeNo == null ? "" : tradeNo);
         orderMapper.update(order);
+        if (order.getAmountPaid() != null && order.getAmountPaid() > 0)
+        {
+            pointsService.prepareConsumeReward(order.getUserId(), order.getAmountPaid(),
+                    "mall", order.getMallOrderNo());
+        }
         return order;
     }
 
