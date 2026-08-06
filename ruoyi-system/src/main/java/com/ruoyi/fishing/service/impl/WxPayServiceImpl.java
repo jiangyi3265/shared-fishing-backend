@@ -4,6 +4,7 @@ import java.io.File;
 import java.lang.reflect.Array;
 import java.util.HashMap;
 import java.util.Map;
+import javax.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +31,19 @@ public class WxPayServiceImpl implements IWxPayService
     private Object refundService;
     private Object notificationParser;
     private boolean initialized = false;
+
+    /**
+     * 真实支付在服务启动阶段完成 SDK、商户私钥和微信支付公钥校验。
+     * 避免部署看似健康，却到第一笔真实付款时才暴露证书配置错误。
+     */
+    @PostConstruct
+    public void initializeProductionPayment()
+    {
+        if (isEnabled())
+        {
+            ensureInit();
+        }
+    }
 
     @Override
     public boolean isEnabled() { return wxProperties.getPay().isEnabled(); }

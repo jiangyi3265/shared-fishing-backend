@@ -1,5 +1,6 @@
 package com.ruoyi;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -92,6 +93,10 @@ public final class ProductionStartupCheck
         {
             errors.add("WX_PAY_APIV3 未配置");
         }
+        else if (wxPayApiV3.length() != 32)
+        {
+            errors.add("WX_PAY_APIV3 必须为 32 位");
+        }
         if (isBlank(wxPayNotify) || !wxPayNotify.startsWith("https://"))
         {
             errors.add("WX_PAY_NOTIFY 必须配置为 HTTPS 回调地址");
@@ -100,6 +105,10 @@ public final class ProductionStartupCheck
         {
             errors.add("WX_PAY_PRIVATE_KEY 未配置");
         }
+        else if (!isReadableFile(wxPayPrivateKey))
+        {
+            errors.add("WX_PAY_PRIVATE_KEY 文件不存在或不可读");
+        }
         if (isPlaceholder(wxPayCertSerial))
         {
             errors.add("WX_PAY_CERT_SERIAL 未配置");
@@ -107,6 +116,10 @@ public final class ProductionStartupCheck
         if (isPlaceholder(wxPayPublicKey))
         {
             errors.add("WX_PAY_PUBLIC_KEY 未配置");
+        }
+        else if (!isReadableFile(wxPayPublicKey))
+        {
+            errors.add("WX_PAY_PUBLIC_KEY 文件不存在或不可读");
         }
         if (isPlaceholder(wxPayPublicKeyId))
         {
@@ -172,6 +185,12 @@ public final class ProductionStartupCheck
     private static boolean isPlaceholder(String value)
     {
         return isBlank(value) || value.startsWith("replace-with");
+    }
+
+    private static boolean isReadableFile(String path)
+    {
+        File file = new File(path);
+        return file.isFile() && file.canRead();
     }
 
     private static boolean containsLocalhost(String value)
