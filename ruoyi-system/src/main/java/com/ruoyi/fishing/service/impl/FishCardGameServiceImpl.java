@@ -5,6 +5,9 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,8 +76,8 @@ public class FishCardGameServiceImpl implements IFishCardGameService
             cards.add(card);
         }
 
-        Date start = (Date) campaign.get("startTime");
-        Date end = (Date) campaign.get("endTime");
+        Date start = normalizeCampaignDate(campaign.get("startTime"));
+        Date end = normalizeCampaignDate(campaign.get("endTime"));
         Date now = new Date();
         String phase = now.before(start) ? "upcoming" : (now.after(end) ? "ended" : "active");
 
@@ -103,8 +106,8 @@ public class FishCardGameServiceImpl implements IFishCardGameService
         Map<String, Object> campaign = mapper.selectActiveCampaign();
         if (campaign == null) throw new ServiceException("当前没有开放中的鱼卡活动");
         Date now = new Date();
-        Date start = (Date) campaign.get("startTime");
-        Date end = (Date) campaign.get("endTime");
+        Date start = normalizeCampaignDate(campaign.get("startTime"));
+        Date end = normalizeCampaignDate(campaign.get("endTime"));
         if (now.before(start)) throw new ServiceException("活动尚未开始");
         if (now.after(end)) throw new ServiceException("活动已结束");
 
@@ -205,5 +208,25 @@ public class FishCardGameServiceImpl implements IFishCardGameService
         if (value instanceof Number) return ((Number) value).intValue();
         try { return Integer.parseInt(String.valueOf(value)); }
         catch (Exception e) { return fallback; }
+    }
+
+    /**
+     * MyBatis/JDBC 驱动可能把 DATETIME 返回为 Date，也可能返回为 LocalDateTime。
+     * 统一转换后再参与活动时间判断，避免线上 ClassCastException。
+     */
+    static Date normalizeCampaignDate(Object value)
+    {
+        if (value instanceof Date) return (Date) value;
+        if (value instanceof LocalDateTime)
+        {
+            LocalDateTime time = (LocalDateTime) value;
+            return Date.from(time.atZone(ZoneId.systemDefault()).toInstant());
+        }
+        if (value instanceof LocalDate)
+        {
+            LocalDate date = (LocalDate) value;
+            return Date.from(date.atStartOfDay(ZoneId.systemDefault()).toInstant());
+        }
+        throw new ServiceException("鱼卡活动时间配置异常");
     }
 }
