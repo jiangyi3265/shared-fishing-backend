@@ -997,6 +997,8 @@ alter table fish_mall_order
   add column points_used int(11) not null default 0 comment '使用积分数' after balance_cents;
 alter table fish_mall_order
   add column points_deduct_cents int(11) not null default 0 comment '积分抵扣金额(分)' after points_used;
+alter table fish_mall_order
+  add column funds_reserved tinyint not null default 0 comment '0未冻结 1已冻结' after points_deduct_cents;
 
 -- END SOURCE: fishing-balance-deduct.sql
 

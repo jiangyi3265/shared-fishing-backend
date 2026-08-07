@@ -144,16 +144,29 @@ public class FishMallServiceImpl implements IFishMallService
         order.setBalanceCents(balanceCents);
         order.setPointsUsed(pointsUsed);
         order.setPointsDeductCents(pointsDeductCents);
+        order.setFundsReserved(1);
         order.setStatus(0);
         order.setRemark2(remark == null ? "" : remark);
         order.setRedeemCode("");
         orderMapper.insert(order);
 
+		// 下单时即冻结本单使用的积分与余额，避免用户同时创建多张订单后重复占用。
+		// 支付取消时由 cancel/超时任务原路释放；支付成功时不再重复扣减。
+		if (pointsUsed > 0)
+		{
+			pointsService.addPoints(userId, -pointsUsed, "mall_reserve",
+					order.getMallOrderNo(), "商城订单积分冻结");
+		}
+		if (balanceCents > 0)
+		{
+			balanceService.applyDelta(userId, -balanceCents, FishBalanceLog.TYPE_CONSUME_MALL,
+					order.getMallOrderNo(), "商城订单余额冻结", "system");
+		}
+
         for (FishMallOrderItem it : snapshots)
         {
             it.setMallOrderId(order.getMallOrderId());
             orderMapper.insertItem(it);
-            goodsMapper.increaseSales(it.getGoodsId(), it.getQty());
         }
         order.setItems(snapshots);
         return order;
@@ -174,14 +187,15 @@ public class FishMallServiceImpl implements IFishMallService
         int balance = order.getBalanceCents() == null ? 0 : order.getBalanceCents();
         int points = order.getPointsUsed() == null ? 0 : order.getPointsUsed();
         int pointsCents = order.getPointsDeductCents() == null ? 0 : order.getPointsDeductCents();
-        // 真正扣减积分（如有）
-        if (points > 0)
+        // 历史订单在下单时尚未冻结资金，支付回调时按旧逻辑扣减；新订单不得重复扣减。
+        boolean alreadyReserved = Integer.valueOf(1).equals(order.getFundsReserved());
+        if (!alreadyReserved && points > 0)
         {
             pointsService.addPoints(order.getUserId(), -points, "mall",
                     order.getMallOrderNo(), "商城订单积分抵扣");
         }
         // 真正扣减余额（如有）
-        if (balance > 0)
+        if (!alreadyReserved && balance > 0)
         {
             balanceService.applyDelta(order.getUserId(), -balance, FishBalanceLog.TYPE_CONSUME_MALL,
                     order.getMallOrderNo(), "商城订单抵扣", "system");
@@ -192,8 +206,15 @@ public class FishMallServiceImpl implements IFishMallService
         order.setBalanceCents(balance);
         order.setPointsUsed(points);
         order.setPointsDeductCents(pointsCents);
+        order.setFundsReserved(1);
         order.setPayTradeNo(tradeNo == null ? "" : tradeNo);
         orderMapper.update(order);
+        // 销量只统计真正支付成功的订单，待支付/取消订单不能影响热卖排序。
+        List<FishMallOrderItem> paidItems = orderMapper.selectItemsByOrderId(order.getMallOrderId());
+        for (FishMallOrderItem item : paidItems)
+        {
+            goodsMapper.increaseSales(item.getGoodsId(), item.getQty());
+        }
         if (order.getAmountPaid() != null && order.getAmountPaid() > 0)
         {
             pointsService.prepareConsumeReward(order.getUserId(), order.getAmountPaid(),
@@ -234,6 +255,23 @@ public class FishMallServiceImpl implements IFishMallService
 
         int g = orderMapper.updateStatusWithGuard(mallOrderId, 0, 3);
         if (g == 0) throw new ServiceException("订单状态已变更");
+		// 新订单在创建时已冻结抵扣资金，取消时必须原路释放。历史未冻结订单不处理。
+		if (Integer.valueOf(1).equals(order.getFundsReserved()))
+		{
+			int points = order.getPointsUsed() == null ? 0 : order.getPointsUsed();
+			int balance = order.getBalanceCents() == null ? 0 : order.getBalanceCents();
+			if (points > 0)
+			{
+				pointsService.addPoints(order.getUserId(), points, "mall_release",
+						order.getMallOrderNo(), "商城订单取消释放积分");
+			}
+			if (balance > 0)
+			{
+				balanceService.applyDelta(order.getUserId(), balance, FishBalanceLog.TYPE_REFUND,
+						order.getMallOrderNo(), "商城订单取消释放余额", "system");
+			}
+			order.setFundsReserved(0);
+		}
         // 回滚库存
         List<FishMallOrderItem> items = orderMapper.selectItemsByOrderId(mallOrderId);
         for (FishMallOrderItem it : items) goodsMapper.increaseStock(it.getGoodsId(), it.getQty());
@@ -243,6 +281,7 @@ public class FishMallServiceImpl implements IFishMallService
     }
 
     @Override
+    @Transactional
     public int autoCancelTimeoutOrders(int timeoutMinutes)
     {
         int minutes = timeoutMinutes <= 0 ? 30 : timeoutMinutes;
@@ -251,14 +290,9 @@ public class FishMallServiceImpl implements IFishMallService
         int canceled = 0;
         for (FishMallOrder order : list)
         {
-            try
-            {
-                // 每单独立事务：失败一个不影响其他
-                FishMallOrder r = cancelSingleInNewTx(order.getMallOrderId());
-                if (r != null) canceled++;
-            }
-            catch (Exception ignore) { }
-        }
+			FishMallOrder r = cancelSingleInNewTx(order.getMallOrderId());
+			if (r != null) canceled++;
+		}
         return canceled;
     }
 

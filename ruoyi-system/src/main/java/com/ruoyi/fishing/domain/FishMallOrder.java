@@ -40,6 +40,9 @@ public class FishMallOrder extends BaseEntity
     /** 积分抵扣金额(分) */
     private Integer pointsDeductCents;
 
+    /** 余额和积分是否已在下单时冻结：0 否（兼容历史订单），1 是 */
+    private Integer fundsReserved;
+
     @Excel(name = "状态", readConverterExp = "0=待支付,1=可领取,2=已领取,3=已取消")
     private Integer status;
 
@@ -75,6 +78,8 @@ public class FishMallOrder extends BaseEntity
     public void setPointsUsed(Integer pointsUsed) { this.pointsUsed = pointsUsed; }
     public Integer getPointsDeductCents() { return pointsDeductCents; }
     public void setPointsDeductCents(Integer pointsDeductCents) { this.pointsDeductCents = pointsDeductCents; }
+    public Integer getFundsReserved() { return fundsReserved; }
+    public void setFundsReserved(Integer fundsReserved) { this.fundsReserved = fundsReserved; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
     public String getRemark2() { return remark2; }

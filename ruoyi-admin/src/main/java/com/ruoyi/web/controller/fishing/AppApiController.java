@@ -706,15 +706,33 @@ public class AppApiController
         if (wxPayService.isEnabled())
         {
             FishUser user = userService.selectFishUserByUserId(userId);
-            if (user == null) return AjaxResult.error("用户不存在");
-            Map<String, Object> prepay = wxPayService.createPrepay(order.getMallOrderNo(), wxAmount,
-                    user.getOpenid(), "钓场补给 · " + order.getMallOrderNo());
+            if (user == null)
+            {
+                mallService.cancel(order.getMallOrderId());
+                return AjaxResult.error("用户不存在");
+            }
+            Map<String, Object> prepay;
+            try
+            {
+                prepay = wxPayService.createPrepay(order.getMallOrderNo(), wxAmount,
+                        user.getOpenid(), "钓场补给 · " + order.getMallOrderNo());
+            }
+            catch (RuntimeException e)
+            {
+                // 首次预下单失败时撤销订单，立即释放库存、积分与余额，避免用户看到“下单失败”但资金仍被冻结。
+                mallService.cancel(order.getMallOrderId());
+                throw e;
+            }
             data.put("pay", prepay);
             data.put("needWxPay", true);
             return AjaxResult.success(data);
         }
 
-        if (!wxPayService.isMockEnabled()) return AjaxResult.error("微信支付未配置");
+        if (!wxPayService.isMockEnabled())
+        {
+            mallService.cancel(order.getMallOrderId());
+            return AjaxResult.error("微信支付未配置");
+        }
         FishMallOrder paid = mallService.markPaid(order.getMallOrderNo(), "MOCK" + System.currentTimeMillis());
         data.put("order", paid);
         data.put("needWxPay", false);
@@ -740,6 +758,61 @@ public class AppApiController
         if (o == null) return AjaxResult.error("订单不存在");
         if (!userId.equals(o.getUserId())) return unauthorized();
         return AjaxResult.success(o);
+    }
+
+    /**
+     * 继续支付待支付商城订单。
+     * 用户取消微信收银台后订单仍会保留，重新发起支付必须复用原订单，
+     * 避免重复扣库存并产生多张待支付订单。
+     */
+    @Anonymous
+    @PostMapping("/mall/order/{mallOrderId}/pay")
+    public AjaxResult payMallOrder(@PathVariable Long mallOrderId)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+
+        FishMallOrder order = mallService.getOrder(mallOrderId);
+        if (order == null) return AjaxResult.error("订单不存在");
+        if (!userId.equals(order.getUserId())) return unauthorized();
+        if (order.getStatus() == null) return AjaxResult.error("订单状态异常");
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("order", order);
+        if (order.getStatus() == 1 || order.getStatus() == 2)
+        {
+            data.put("needWxPay", false);
+            return AjaxResult.success(data);
+        }
+        if (order.getStatus() != 0) return AjaxResult.error("该订单已取消，无法继续支付");
+
+        int total = order.getTotalCents() == null ? 0 : order.getTotalCents();
+        int balance = order.getBalanceCents() == null ? 0 : order.getBalanceCents();
+        int pointsCents = order.getPointsDeductCents() == null ? 0 : order.getPointsDeductCents();
+        int wxAmount = Math.max(0, total - pointsCents - balance);
+        if (wxAmount <= 0)
+        {
+            mallService.markPaid(order.getMallOrderNo(), "ZERO_PAY");
+            data.put("order", mallService.getOrder(order.getMallOrderId()));
+            data.put("needWxPay", false);
+            return AjaxResult.success(data);
+        }
+
+        if (wxPayService.isEnabled())
+        {
+            FishUser user = userService.selectFishUserByUserId(userId);
+            if (user == null) return AjaxResult.error("用户不存在");
+            Map<String, Object> prepay = wxPayService.createPrepay(order.getMallOrderNo(), wxAmount,
+                    user.getOpenid(), "钓场补给 · " + order.getMallOrderNo());
+            data.put("pay", prepay);
+            data.put("needWxPay", true);
+            return AjaxResult.success(data);
+        }
+
+        if (!wxPayService.isMockEnabled()) return AjaxResult.error("微信支付未配置");
+        data.put("order", mallService.markPaid(order.getMallOrderNo(), "MOCK" + System.currentTimeMillis()));
+        data.put("needWxPay", false);
+        return AjaxResult.success(data);
     }
 
     // ===================== 储值钱包 =====================
