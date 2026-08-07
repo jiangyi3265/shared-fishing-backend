@@ -176,7 +176,7 @@ wx:
     public-key-path: ${WX_PAY_PUBLIC_KEY:}
     public-key-id: ${WX_PAY_PUBLIC_KEY_ID:}
 
-# 和风天气（免费版即可，不配则返回 mock 数据）
+# 和风天气（免费版即可；不配置或调用失败时返回“天气暂未更新”，不伪造气象数据）
 weather:
   qweather:
     key: ${WEATHER_QWEATHER_KEY:}

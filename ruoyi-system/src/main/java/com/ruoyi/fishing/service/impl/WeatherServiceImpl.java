@@ -27,7 +27,7 @@ public class WeatherServiceImpl implements IWeatherService
     public Map<String, Object> getCurrentWeather(String location)
     {
         if (apiKey == null || apiKey.isEmpty()) {
-            return mockWeather();
+            return unavailableWeather("天气服务暂未配置");
         }
         try {
             String url = baseUrl + "/v7/weather/now?location=" + location + "&key=" + apiKey;
@@ -47,19 +47,13 @@ public class WeatherServiceImpl implements IWeatherService
         } catch (Exception e) {
             log.warn("[weather] API call failed: {}", e.getMessage());
         }
-        return mockWeather();
+        return unavailableWeather("天气信息暂未更新");
     }
 
-    private Map<String, Object> mockWeather() {
+    private Map<String, Object> unavailableWeather(String message) {
         Map<String, Object> m = new HashMap<>();
-        m.put("temp", "26");
-        m.put("text", "多云");
-        m.put("windDir", "东南风");
-        m.put("windScale", "2");
-        m.put("humidity", "65");
-        m.put("pressure", "1013");
-        m.put("feelsLike", "28");
-        m.put("mock", true);
+        m.put("available", false);
+        m.put("message", message);
         return m;
     }
 }
