@@ -130,6 +130,10 @@ public class FishWeighServiceImpl implements IFishWeighService
         o.setPayTradeNo("BALANCE");
         o.setPaidTime(new Date());
         weighMapper.update(o);
+        if (amount > 0)
+        {
+            pointsService.prepareConsumeReward(userId, amount, "weigh", o.getWeighNo());
+        }
         return o;
     }
 

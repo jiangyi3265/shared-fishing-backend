@@ -5,7 +5,7 @@ import java.util.Date;
 /**
  * 线上消费积分奖励。
  *
- * 状态：0 待领取，1 已领取。
+ * 状态：0 待发放，1 已到账。
  */
 public class FishPointsReward
 {

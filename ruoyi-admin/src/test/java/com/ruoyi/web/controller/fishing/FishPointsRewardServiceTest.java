@@ -21,12 +21,16 @@ import com.ruoyi.fishing.service.impl.FishPointsServiceImpl;
 public class FishPointsRewardServiceTest
 {
     @Test
-    public void fullYuanEarnsFivePointsAndCentsAreFloored() throws Exception
+    public void fullYuanEarnsFivePointsAutomaticallyAndCentsAreFloored() throws Exception
     {
         FishPointsMapper mapper = org.mockito.Mockito.mock(FishPointsMapper.class);
         FishPointsServiceImpl service = service(mapper);
-        FishPointsReward stored = reward(1L, 7L, "F1001", 299, 10, 0);
-        when(mapper.selectRewardBySource(7L, "F1001")).thenReturn(stored);
+        FishPointsReward pending = reward(1L, 7L, "F1001", 299, 10, 0);
+        FishPointsReward credited = reward(1L, 7L, "F1001", 299, 10, 1);
+        when(mapper.selectRewardBySource(7L, "F1001")).thenReturn(pending, credited);
+        when(mapper.claimReward(1L)).thenReturn(1);
+        when(mapper.addPoints(7L, 10)).thenReturn(1);
+        when(mapper.selectUserPoints(7L)).thenReturn(110);
 
         FishPointsReward result = service.prepareConsumeReward(7L, 299, "fishing", "F1001");
 
@@ -34,7 +38,10 @@ public class FishPointsRewardServiceTest
         verify(mapper).insertConsumeReward(captor.capture());
         assertEquals(Integer.valueOf(10), captor.getValue().getPoints());
         assertEquals(Integer.valueOf(299), captor.getValue().getAmountCents());
-        assertSame(stored, result);
+        assertSame(credited, result);
+        verify(mapper).claimReward(1L);
+        verify(mapper).addPoints(7L, 10);
+        verify(mapper).insertPointsLog(eq(7L), eq(10), eq(110), eq("consume"), eq("F1001"), any(String.class));
     }
 
     @Test
@@ -85,6 +92,22 @@ public class FishPointsRewardServiceTest
         verify(mapper, never()).addPoints(eq(7L), any(Integer.class));
         verify(mapper, never()).insertPointsLog(any(Long.class), any(Integer.class), any(Integer.class),
                 any(String.class), any(String.class), any(String.class));
+    }
+
+    @Test
+    public void duplicatePaymentPreparationCannotAddPointsAgain() throws Exception
+    {
+        FishPointsMapper mapper = org.mockito.Mockito.mock(FishPointsMapper.class);
+        FishPointsServiceImpl service = service(mapper);
+        FishPointsReward credited = reward(4L, 7L, "F1005", 100, 5, 1);
+        when(mapper.selectRewardBySource(7L, "F1005")).thenReturn(credited, credited);
+
+        FishPointsReward result = service.prepareConsumeReward(7L, 100, "fishing", "F1005");
+
+        assertSame(credited, result);
+        verify(mapper).insertConsumeReward(any(FishPointsReward.class));
+        verify(mapper, never()).claimReward(4L);
+        verify(mapper, never()).addPoints(eq(7L), any(Integer.class));
     }
 
     private FishPointsServiceImpl service(FishPointsMapper mapper) throws Exception

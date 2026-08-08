@@ -215,9 +215,10 @@ public class FishMallServiceImpl implements IFishMallService
         {
             goodsMapper.increaseSales(item.getGoodsId(), item.getQty());
         }
-        if (order.getAmountPaid() != null && order.getAmountPaid() > 0)
+        int rewardableCents = Math.max(0, total - pointsCents);
+        if (rewardableCents > 0)
         {
-            pointsService.prepareConsumeReward(order.getUserId(), order.getAmountPaid(),
+            pointsService.prepareConsumeReward(order.getUserId(), rewardableCents,
                     "mall", order.getMallOrderNo());
         }
         return order;

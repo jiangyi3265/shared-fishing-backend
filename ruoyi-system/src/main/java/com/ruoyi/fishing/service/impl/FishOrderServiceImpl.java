@@ -210,8 +210,9 @@ public class FishOrderServiceImpl implements IFishOrderService
         }
         orderMapper.updateFishOrder(order);
         settleAttachedMallOrders(order, order.getPayTradeNo());
-        if (plan.wxAmountCents > 0) {
-            pointsService.prepareConsumeReward(userId, plan.wxAmountCents, "fishing", order.getOrderNo());
+        int rewardableCents = plan.wxAmountCents + plan.balanceCents;
+        if (rewardableCents > 0) {
+            pointsService.prepareConsumeReward(userId, rewardableCents, "fishing", order.getOrderNo());
         }
         memberLevelService.refreshUserLevel(userId);
         return order;
@@ -360,11 +361,13 @@ public class FishOrderServiceImpl implements IFishOrderService
         orderMapper.updateFishOrder(order);
         // 推进合并支付的商城订单
         settleAttachedMallOrders(order, tradeNo);
-        // 线上实付生成待领取积分奖励；余额抵扣不计入本次规则
+        // 实际消费（微信 + 储值余额）按每满 1 元自动赠送 5 积分。
         try {
             int wxPaid = order.getAmountPaid() == null ? 0 : order.getAmountPaid();
-            if (wxPaid > 0) {
-                pointsService.prepareConsumeReward(order.getUserId(), wxPaid, "fishing", order.getOrderNo());
+            int balancePaid = order.getBalanceCents() == null ? 0 : order.getBalanceCents();
+            int rewardableCents = wxPaid + balancePaid;
+            if (rewardableCents > 0) {
+                pointsService.prepareConsumeReward(order.getUserId(), rewardableCents, "fishing", order.getOrderNo());
             }
             memberLevelService.refreshUserLevel(order.getUserId());
         } catch (Exception e) {

@@ -143,6 +143,8 @@ public class FishPointsServiceImpl implements IFishPointsService
         reward.setPoints(pts);
         reward.setStatus(0);
         mapper.insertConsumeReward(reward);
+        FishPointsReward pending = mapper.selectRewardBySource(userId, sourceNo);
+        creditPendingReward(userId, sourceNo, pending);
         return mapper.selectRewardBySource(userId, sourceNo);
     }
 
@@ -157,15 +159,7 @@ public class FishPointsServiceImpl implements IFishPointsService
         FishPointsReward reward = mapper.selectRewardBySource(userId, sourceNo);
         if (reward == null) throw new ServiceException("暂无可领取积分");
 
-        boolean newlyClaimed = false;
-        if (Integer.valueOf(0).equals(reward.getStatus())) {
-            int changed = mapper.claimReward(reward.getRewardId());
-            if (changed == 1) {
-                addPoints(userId, reward.getPoints(), "consume", sourceNo,
-                        "线上消费赠送（1元=5积分）");
-                newlyClaimed = true;
-            }
-        }
+        boolean newlyClaimed = creditPendingReward(userId, sourceNo, reward);
 
         FishPointsReward latest = mapper.selectRewardBySource(userId, sourceNo);
         Map<String, Object> result = new HashMap<>();
@@ -173,6 +167,21 @@ public class FishPointsServiceImpl implements IFishPointsService
         result.put("claimedNow", newlyClaimed);
         result.put("totalPoints", getUserPoints(userId));
         return result;
+    }
+
+    /**
+     * 把待发放奖励原子地改为已到账，再增加用户积分。
+     * claimReward 带 status=0 条件，支付回调、结果页重试或微信重复通知都只会成功一次。
+     */
+    private boolean creditPendingReward(Long userId, String sourceNo, FishPointsReward reward) {
+        if (reward == null || !Integer.valueOf(0).equals(reward.getStatus())) return false;
+
+        int changed = mapper.claimReward(reward.getRewardId());
+        if (changed != 1) return false;
+
+        addPoints(userId, reward.getPoints(), "consume", sourceNo,
+                "消费自动赠送（1元=5积分）");
+        return true;
     }
 
     private int calcConsecutiveDays(Long userId) {

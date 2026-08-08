@@ -33,7 +33,7 @@ public interface IFishPointsService
     Map<String, Object> checkin(Long userId);
     Map<String, Object> checkinCalendar(Long userId, String month);
 
-    // 线上消费赠积分（每实付1元=5积分，支付成功后生成，用户主动领取）
+    // 消费赠积分（每满1元=5积分，支付成功后自动到账）
     FishPointsReward prepareConsumeReward(Long userId, int amountCents, String sourceType, String sourceNo);
     FishPointsReward getConsumeReward(Long userId, String sourceNo);
     Map<String, Object> claimConsumeReward(Long userId, String sourceNo);
