@@ -43,7 +43,6 @@ import com.ruoyi.fishing.service.IFishCardGameService;
 import com.ruoyi.fishing.service.IFishMemberLevelService;
 import com.ruoyi.fishing.service.IWeatherService;
 import com.ruoyi.fishing.service.IFishPointsService;
-import com.ruoyi.fishing.service.IFishGroupService;
 import com.ruoyi.fishing.service.IFishRentalService;
 import com.ruoyi.fishing.service.IFishCompetitionService;
 import com.ruoyi.fishing.service.IFishUserService;
@@ -97,8 +96,6 @@ public class AppApiController
     private IWeatherService weatherService;
     @Autowired
     private IFishPointsService pointsService;
-    @Autowired
-    private IFishGroupService groupService;
     @Autowired
     private IFishRentalService rentalService;
     @Autowired
@@ -1103,15 +1100,7 @@ public class AppApiController
         return AjaxResult.success(spotService.cancelReservation(id, userId, "用户取消"));
     }
 
-    // ===== 钓获打卡 =====
-
-    @Anonymous
-    @GetMapping("/catch/list")
-    public AjaxResult catchList()
-    {
-        Long userId = currentUserId();
-        return AjaxResult.success(catchService.selectPublicList(userId));
-    }
+    // ===== 我的钓获：仅返回当前登录用户自己的记录 =====
 
     @GetMapping("/catch/mine")
     public AjaxResult catchMine()
@@ -1119,46 +1108,6 @@ public class AppApiController
         Long userId = currentUserId();
         if (userId == null) return unauthorized();
         return AjaxResult.success(catchService.selectByUser(userId));
-    }
-
-    @PostMapping("/catch/publish")
-    public AjaxResult catchPublish(@RequestBody com.ruoyi.fishing.domain.FishCatchRecord record)
-    {
-        Long userId = currentUserId();
-        if (userId == null) return unauthorized();
-        record.setUserId(userId);
-        return AjaxResult.success(catchService.publish(record));
-    }
-
-    @PostMapping("/catch/like/{catchId}")
-    public AjaxResult catchLike(@PathVariable Long catchId)
-    {
-        Long userId = currentUserId();
-        if (userId == null) return unauthorized();
-        int result = catchService.toggleLike(userId, catchId);
-        return AjaxResult.success(result == 1 ? "已点赞" : "已取消", result);
-    }
-
-    @Anonymous
-    @GetMapping("/catch/comments/{catchId}")
-    public AjaxResult catchComments(@PathVariable Long catchId)
-    {
-        return AjaxResult.success(catchService.getComments(catchId));
-    }
-
-    @PostMapping("/catch/comment")
-    public AjaxResult catchComment(@RequestBody Map<String, Object> body)
-    {
-        Long userId = currentUserId();
-        if (userId == null) return unauthorized();
-        if (body.get("catchId") == null || body.get("content") == null)
-            return AjaxResult.error("参数缺失");
-        Long catchId = Long.valueOf(body.get("catchId").toString());
-        String content = body.get("content").toString().trim();
-        if (content.isEmpty()) return AjaxResult.error("评论内容不能为空");
-        Long replyToId = body.containsKey("replyToId") && body.get("replyToId") != null ? Long.valueOf(body.get("replyToId").toString()) : null;
-        Long replyToUser = body.containsKey("replyToUser") && body.get("replyToUser") != null ? Long.valueOf(body.get("replyToUser").toString()) : null;
-        return AjaxResult.success(catchService.addComment(catchId, userId, content, replyToId, replyToUser));
     }
 
     // ===== 极智鱼鉴：电子鱼卡 =====
@@ -1265,62 +1214,6 @@ public class AppApiController
         Long userId = currentUserId();
         if (userId == null) return unauthorized();
         return AjaxResult.success(pointsService.claimConsumeReward(userId, sourceNo));
-    }
-
-    // ===== 拼场约钓 =====
-
-    @Anonymous
-    @GetMapping("/group/list")
-    public AjaxResult groupList(@RequestParam(required = false) Long venueId)
-    {
-        return AjaxResult.success(groupService.selectActiveList(venueId));
-    }
-
-    @GetMapping("/group/{id}")
-    public AjaxResult groupDetail(@PathVariable Long id)
-    {
-        return AjaxResult.success(groupService.selectById(id));
-    }
-
-    @GetMapping("/group/mine")
-    public AjaxResult groupMine()
-    {
-        Long userId = currentUserId();
-        if (userId == null) return unauthorized();
-        return AjaxResult.success(groupService.selectByUser(userId));
-    }
-
-    @PostMapping("/group/create")
-    public AjaxResult groupCreate(@RequestBody com.ruoyi.fishing.domain.FishGroupFishing g)
-    {
-        Long userId = currentUserId();
-        if (userId == null) return unauthorized();
-        g.setUserId(userId);
-        return AjaxResult.success(groupService.create(g));
-    }
-
-    @PostMapping("/group/join/{groupId}")
-    public AjaxResult groupJoin(@PathVariable Long groupId)
-    {
-        Long userId = currentUserId();
-        if (userId == null) return unauthorized();
-        return AjaxResult.success(groupService.join(groupId, userId));
-    }
-
-    @PostMapping("/group/quit/{groupId}")
-    public AjaxResult groupQuit(@PathVariable Long groupId)
-    {
-        Long userId = currentUserId();
-        if (userId == null) return unauthorized();
-        return AjaxResult.success(groupService.quit(groupId, userId));
-    }
-
-    @PostMapping("/group/cancel/{groupId}")
-    public AjaxResult groupCancelByUser(@PathVariable Long groupId)
-    {
-        Long userId = currentUserId();
-        if (userId == null) return unauthorized();
-        return AjaxResult.success(groupService.cancel(groupId, userId));
     }
 
     // ===== 装备租赁 =====
