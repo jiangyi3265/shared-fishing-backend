@@ -10,6 +10,7 @@ import com.ruoyi.fishing.domain.FishAd;
 import com.ruoyi.fishing.domain.FishRegistration;
 import com.ruoyi.fishing.mapper.FishAdMapper;
 import com.ruoyi.fishing.mapper.FishRegistrationMapper;
+import com.ruoyi.fishing.service.IFishPointsService;
 import com.ruoyi.fishing.service.IFishRegistrationService;
 import com.ruoyi.fishing.service.IFishUserService;
 
@@ -24,6 +25,9 @@ public class FishRegistrationServiceImpl implements IFishRegistrationService
 
     @Autowired
     private IFishUserService userService;
+
+    @Autowired
+    private IFishPointsService pointsService;
 
     @Override
     public FishRegistration selectFishRegistrationByRegId(Long regId) { return regMapper.selectFishRegistrationByRegId(regId); }
@@ -69,13 +73,23 @@ public class FishRegistrationServiceImpl implements IFishRegistrationService
     }
 
     @Override
+    @Transactional
     public FishRegistration pay(Long regId)
     {
         FishRegistration r = regMapper.selectFishRegistrationByRegId(regId);
         if (r == null) throw new ServiceException("报名不存在");
-        r.setPaid(1);
-        r.setPaidTime(new Date());
-        regMapper.updateFishRegistration(r);
+        if (!Integer.valueOf(1).equals(r.getPaid()))
+        {
+            r.setPaid(1);
+            r.setPaidTime(new Date());
+            regMapper.updateFishRegistration(r);
+        }
+        int rewardableCents = r.getFeeCents() == null ? 0 : r.getFeeCents();
+        if (rewardableCents > 0)
+        {
+            pointsService.prepareConsumeReward(r.getUserId(), rewardableCents,
+                    "activity", "ACT" + regId);
+        }
         return r;
     }
 

@@ -12,6 +12,7 @@ import com.ruoyi.fishing.domain.FishRentalOrder;
 import com.ruoyi.fishing.domain.FishUserBalance;
 import com.ruoyi.fishing.mapper.FishRentalMapper;
 import com.ruoyi.fishing.service.IFishBalanceService;
+import com.ruoyi.fishing.service.IFishPointsService;
 import com.ruoyi.fishing.service.IFishRentalService;
 import com.ruoyi.fishing.service.IFishUserService;
 
@@ -21,6 +22,7 @@ public class FishRentalServiceImpl implements IFishRentalService
     @Autowired private FishRentalMapper mapper;
     @Autowired private IFishUserService userService;
     @Autowired private IFishBalanceService balanceService;
+    @Autowired private IFishPointsService pointsService;
 
     @Override public FishRentalGoods selectGoodsById(Long id) { return mapper.selectGoodsById(id); }
     @Override public List<FishRentalGoods> selectGoodsList(FishRentalGoods q) { return mapper.selectGoodsList(q); }
@@ -67,6 +69,11 @@ public class FishRentalServiceImpl implements IFishRentalService
         if (totalCharge > 0) {
             balanceService.applyDelta(userId, -totalCharge, "consume_fishing",
                     o.getOrderNo(), "装备租赁(" + g.getName() + ")", "system");
+        }
+        // 押金归还时会退回，只有实际租金属于消费并按 1 元 = 5 积分赠送。
+        int rewardableCents = g.getRentCents() == null ? 0 : g.getRentCents();
+        if (rewardableCents > 0) {
+            pointsService.prepareConsumeReward(userId, rewardableCents, "rental", o.getOrderNo());
         }
         return o;
     }

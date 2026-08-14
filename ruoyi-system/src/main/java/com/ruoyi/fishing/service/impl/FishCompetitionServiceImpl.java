@@ -11,6 +11,7 @@ import com.ruoyi.fishing.domain.FishCompetitionEntry;
 import com.ruoyi.fishing.mapper.FishCompetitionMapper;
 import com.ruoyi.fishing.service.IFishBalanceService;
 import com.ruoyi.fishing.service.IFishCompetitionService;
+import com.ruoyi.fishing.service.IFishPointsService;
 import com.ruoyi.fishing.service.IFishUserService;
 
 @Service
@@ -19,6 +20,7 @@ public class FishCompetitionServiceImpl implements IFishCompetitionService
     @Autowired private FishCompetitionMapper mapper;
     @Autowired private IFishUserService userService;
     @Autowired private IFishBalanceService balanceService;
+    @Autowired private IFishPointsService pointsService;
 
     @Override public FishCompetition selectById(Long compId) {
         FishCompetition c = mapper.selectById(compId);
@@ -57,6 +59,11 @@ public class FishCompetitionServiceImpl implements IFishCompetitionService
         e.setNickname(nickname);
         e.setPhone(phone);
         mapper.insertEntry(e);
+        int rewardableCents = c.getEntryFeeCents() == null ? 0 : c.getEntryFeeCents();
+        if (rewardableCents > 0) {
+            pointsService.prepareConsumeReward(userId, rewardableCents,
+                    "competition", "COMP" + compId);
+        }
         return e;
     }
 
