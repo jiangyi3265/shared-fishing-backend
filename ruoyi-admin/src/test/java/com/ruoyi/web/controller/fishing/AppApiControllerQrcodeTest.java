@@ -5,6 +5,8 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -69,13 +71,26 @@ public class AppApiControllerQrcodeTest
         when(venueService.selectFishVenueList(any(FishVenue.class)))
                 .thenReturn(Collections.singletonList(venue));
         FishOrder started = runningOrder(VENUE_ID);
-        when(orderService.startOrder(USER_ID, VENUE_ID, null)).thenReturn(started);
+        when(orderService.startOrder(USER_ID, VENUE_ID, null,
+                IFishOrderService.SAFETY_AGREEMENT_VERSION, true)).thenReturn(started);
 
-        AjaxResult result = controller.startOrder(Collections.<String, Object>emptyMap());
+        AjaxResult result = controller.startOrder(safetyBody());
 
         assertSame(started, result.get(AjaxResult.DATA_TAG));
-        verify(orderService).startOrder(USER_ID, VENUE_ID, null);
+        verify(orderService).startOrder(USER_ID, VENUE_ID, null,
+                IFishOrderService.SAFETY_AGREEMENT_VERSION, true);
         verify(qrcodeMapper, never()).selectFishQrcodeByQrId(any(Long.class));
+    }
+
+    @Test
+    public void startRequiresCurrentSafetyAgreement()
+    {
+        ServiceException error = assertServiceException(() ->
+                controller.startOrder(Collections.<String, Object>emptyMap()));
+
+        assertTrue(error.getMessage().contains("安全协议"));
+        verify(orderService, never()).startOrder(any(Long.class), any(Long.class), any(Long.class),
+                anyString(), anyBoolean());
     }
 
     @Test
@@ -91,6 +106,21 @@ public class AppApiControllerQrcodeTest
 
         assertSame(finished, result.get(AjaxResult.DATA_TAG));
         verify(orderService).finishOrder(USER_ID);
+    }
+
+    @Test
+    public void pendingOrderCanResumeForCurrentUser()
+    {
+        FishOrder running = runningOrder(VENUE_ID);
+        Map<String, Object> body = new HashMap<>();
+        body.put("userId", USER_ID);
+        body.put("orderId", running.getOrderId());
+        when(orderService.resumeOrder(USER_ID, running.getOrderId())).thenReturn(running);
+
+        AjaxResult result = controller.resumeOrder(body);
+
+        assertSame(running, result.get(AjaxResult.DATA_TAG));
+        verify(orderService).resumeOrder(USER_ID, running.getOrderId());
     }
 
     @Test
@@ -137,12 +167,14 @@ public class AppApiControllerQrcodeTest
 
         when(qrcodeMapper.selectFishQrcodeByQrId(36L)).thenReturn(qr);
         when(spotService.selectById(spotId)).thenReturn(spot);
-        when(orderService.startOrder(USER_ID, VENUE_ID, spotId)).thenReturn(started);
+        when(orderService.startOrder(USER_ID, VENUE_ID, spotId,
+                IFishOrderService.SAFETY_AGREEMENT_VERSION, true)).thenReturn(started);
 
         AjaxResult result = controller.startOrder(qrBody(36L));
 
         assertSame(started, result.get(AjaxResult.DATA_TAG));
-        verify(orderService).startOrder(USER_ID, VENUE_ID, spotId);
+        verify(orderService).startOrder(USER_ID, VENUE_ID, spotId,
+                IFishOrderService.SAFETY_AGREEMENT_VERSION, true);
     }
 
     @Test
@@ -170,7 +202,8 @@ public class AppApiControllerQrcodeTest
         ServiceException error = assertServiceException(() -> controller.startOrder(qrBody(34L)));
 
         assertTrue(error.getMessage().contains("离场码"));
-        verify(orderService, never()).startOrder(any(Long.class), any(Long.class), any(Long.class));
+        verify(orderService, never()).startOrder(any(Long.class), any(Long.class), any(Long.class),
+                anyString(), anyBoolean());
     }
 
     @Test
@@ -188,8 +221,16 @@ public class AppApiControllerQrcodeTest
 
     private Map<String, Object> qrBody(Long qrId)
     {
-        Map<String, Object> body = new HashMap<>();
+        Map<String, Object> body = safetyBody();
         body.put("qrId", qrId);
+        return body;
+    }
+
+    private Map<String, Object> safetyBody()
+    {
+        Map<String, Object> body = new HashMap<>();
+        body.put("safetyAgreementVersion", IFishOrderService.SAFETY_AGREEMENT_VERSION);
+        body.put("safetyAgreed", true);
         return body;
     }
 

@@ -210,6 +210,39 @@ public class WxPayServiceImpl implements IWxPayService
     }
 
     @Override
+    public void closeOrder(String orderNo)
+    {
+        if (isBlank(orderNo) || !isEnabled()) return;
+        ensureInit();
+        if (!initialized) return;
+        try
+        {
+            WxProperties.Pay pay = wxProperties.getPay();
+            Class<?> reqCls = Class.forName("com.wechat.pay.java.service.payments.jsapi.model.CloseOrderRequest");
+            Object req = reqCls.getDeclaredConstructor().newInstance();
+            reqCls.getMethod("setMchid", String.class).invoke(req, pay.getMchId());
+            reqCls.getMethod("setOutTradeNo", String.class).invoke(req, orderNo);
+            jsapiService.getClass().getMethod("closeOrder", reqCls).invoke(jsapiService, req);
+        }
+        catch (Throwable t)
+        {
+            Throwable cause = rootCause(t);
+            if (cause instanceof com.wechat.pay.java.core.exception.ServiceException)
+            {
+                String code = ((com.wechat.pay.java.core.exception.ServiceException) cause).getErrorCode();
+                if ("ORDER_NOT_EXIST".equals(code) || "ORDER_NOT_EXISTS".equals(code)
+                        || "ORDER_CLOSED".equals(code) || "ORDERCLOSED".equals(code)) return;
+                if ("ORDERPAID".equals(code) || "ORDER_PAID".equals(code))
+                {
+                    throw new ServiceException("该订单已经支付，不能继续垂钓，请刷新支付结果");
+                }
+            }
+            log.error("WxPay close order failed orderNo={}", orderNo, t);
+            throw new ServiceException("撤销本次结算失败，请稍后重试或联系工作人员：" + rootMessage(t));
+        }
+    }
+
+    @Override
     public PayCallback handleNotify(String body, Map<String, String> headers)
     {
         ensureInit();
@@ -234,11 +267,21 @@ public class WxPayServiceImpl implements IWxPayService
             cb.orderNo = (String) txCls.getMethod("getOutTradeNo").invoke(tx);
             Object transactionId = invokeIfExists(tx, "getTransactionId");
             cb.transactionId = transactionId == null ? "" : transactionId.toString();
+            Object amount = invokeIfExists(tx, "getAmount");
+            Object total = amount == null ? null : invokeIfExists(amount, "getTotal");
+            if (total instanceof Number) cb.amountCents = ((Number) total).intValue();
             return cb;
         } catch (Throwable t) {
             log.error("WxPay notify parse failed", t);
             throw new ServiceException("微信支付通知验签失败：" + rootMessage(t));
         }
+    }
+
+    private Throwable rootCause(Throwable t)
+    {
+        Throwable cur = t;
+        while (cur.getCause() != null) cur = cur.getCause();
+        return cur;
     }
 
     @Override

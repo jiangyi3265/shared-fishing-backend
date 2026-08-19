@@ -20,6 +20,7 @@ public interface FishOrderMapper
     public int updateOrderStatusWithGuard(@Param("orderId") Long orderId,
                                           @Param("expectedStatus") Integer expectedStatus,
                                           @Param("newStatus") Integer newStatus);
+    public int resumePendingOrder(@Param("orderId") Long orderId, @Param("userId") Long userId);
     public int deleteFishOrderByOrderId(Long orderId);
     public int deleteFishOrderByOrderIds(Long[] orderIds);
 }

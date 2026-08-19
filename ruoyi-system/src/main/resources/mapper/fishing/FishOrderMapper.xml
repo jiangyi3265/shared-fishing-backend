@@ -21,6 +21,8 @@
         <result property="paidTime"        column="paid_time"/>
         <result property="payTradeNo"      column="pay_trade_no"/>
         <result property="ruleSnapshot"    column="rule_snapshot"/>
+        <result property="safetyAgreementVersion" column="safety_agreement_version"/>
+        <result property="safetyAgreedTime" column="safety_agreed_time"/>
         <result property="mallOrderIds"    column="mall_order_ids"/>
         <result property="cancelReason"    column="cancel_reason"/>
         <result property="createBy"        column="create_by"/>
@@ -36,7 +38,8 @@
         select o.order_id, o.order_no, o.user_id, o.venue_id, o.spot_id, o.status, o.start_time, o.end_time,
                o.duration_seconds, o.elapsed_seconds, o.amount_cents, o.discount_cents, o.amount_paid,
                o.balance_cents,
-               o.coupon_id, o.paid_time, o.pay_trade_no, o.rule_snapshot, o.mall_order_ids, o.cancel_reason,
+               o.coupon_id, o.paid_time, o.pay_trade_no, o.rule_snapshot,
+               o.safety_agreement_version, o.safety_agreed_time, o.mall_order_ids, o.cancel_reason,
                o.create_by, o.create_time, o.update_by, o.update_time,
                v.name as venue_name, s.spot_name as spot_name, u.nickname as nickname
         from fish_order o
@@ -113,6 +116,8 @@
             <if test="amountPaid != null">amount_paid,</if>
             <if test="couponId != null">coupon_id,</if>
             <if test="ruleSnapshot != null">rule_snapshot,</if>
+            <if test="safetyAgreementVersion != null">safety_agreement_version,</if>
+            <if test="safetyAgreedTime != null">safety_agreed_time,</if>
             create_time
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
@@ -126,6 +131,8 @@
             <if test="amountPaid != null">#{amountPaid},</if>
             <if test="couponId != null">#{couponId},</if>
             <if test="ruleSnapshot != null">#{ruleSnapshot},</if>
+            <if test="safetyAgreementVersion != null">#{safetyAgreementVersion},</if>
+            <if test="safetyAgreedTime != null">#{safetyAgreedTime},</if>
             sysdate()
         </trim>
     </insert>
@@ -147,6 +154,8 @@
             <if test="paidTime != null">paid_time = #{paidTime},</if>
             <if test="payTradeNo != null">pay_trade_no = #{payTradeNo},</if>
             <if test="ruleSnapshot != null">rule_snapshot = #{ruleSnapshot},</if>
+            <if test="safetyAgreementVersion != null">safety_agreement_version = #{safetyAgreementVersion},</if>
+            <if test="safetyAgreedTime != null">safety_agreed_time = #{safetyAgreedTime},</if>
             <if test="mallOrderIds != null">mall_order_ids = #{mallOrderIds},</if>
             <if test="cancelReason != null">cancel_reason = #{cancelReason},</if>
             <if test="updateBy != null">update_by = #{updateBy},</if>
@@ -158,6 +167,24 @@
     <update id="updateOrderStatusWithGuard">
         update fish_order set status = #{newStatus}, update_time = sysdate()
         where order_id = #{orderId} and status = #{expectedStatus}
+    </update>
+
+    <update id="resumePendingOrder">
+        update fish_order
+        set status = 1,
+            end_time = null,
+            duration_seconds = 0,
+            elapsed_seconds = 0,
+            amount_cents = 0,
+            discount_cents = 0,
+            amount_paid = 0,
+            balance_cents = 0,
+            coupon_id = null,
+            paid_time = null,
+            pay_trade_no = null,
+            mall_order_ids = null,
+            update_time = sysdate()
+        where order_id = #{orderId} and user_id = #{userId} and status = 2
     </update>
 
     <delete id="deleteFishOrderByOrderId" parameterType="Long">

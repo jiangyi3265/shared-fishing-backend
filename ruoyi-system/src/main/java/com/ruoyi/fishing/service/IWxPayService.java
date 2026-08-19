@@ -12,6 +12,12 @@ public interface IWxPayService
     /** 发起下单，返回前端 wx.requestPayment 需要的参数（或 mock 流水号） */
     Map<String, Object> createPrepay(String orderNo, int amountCents, String openid, String description);
 
+    /**
+     * 关闭尚未支付的微信订单。订单未在微信侧创建或已经关闭时按幂等成功处理；
+     * 已支付或状态不明确时抛出异常，避免业务订单恢复计时后仍按旧金额付款。
+     */
+    void closeOrder(String orderNo);
+
     /** 处理微信支付回调，返回订单号 */
     PayCallback handleNotify(String body, Map<String, String> headers);
 
@@ -38,5 +44,6 @@ public interface IWxPayService
     {
         public String orderNo;
         public String transactionId;
+        public Integer amountCents;
     }
 }

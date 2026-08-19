@@ -161,6 +161,7 @@ jobs:
             "${RELEASE_DIR}/sql/migration-2026-07-28-fish-card-game.sql"
             "${RELEASE_DIR}/sql/migration-2026-08-01-visible-content.sql"
             "${RELEASE_DIR}/sql/migration-2026-08-06-mall-funds-reservation.sql"
+            "${RELEASE_DIR}/sql/migration-2026-08-16-safety-agreement.sql"
           )
           ENV_FILE="${DEPLOY_DIR}/.env.production"
           for migration_file in "${MIGRATION_FILES[@]}"; do

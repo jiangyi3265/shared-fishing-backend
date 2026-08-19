@@ -58,6 +58,12 @@ public class FishOrder extends BaseEntity
     private String payTradeNo;
     private String ruleSnapshot;
 
+    /** 用户在开始计时前确认的安全协议版本 */
+    private String safetyAgreementVersion;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date safetyAgreedTime;
+
     /** 合并支付的商城订单 ID，逗号分隔 */
     private String mallOrderIds;
     private String cancelReason;
@@ -102,6 +108,10 @@ public class FishOrder extends BaseEntity
     public void setPayTradeNo(String payTradeNo) { this.payTradeNo = payTradeNo; }
     public String getRuleSnapshot() { return ruleSnapshot; }
     public void setRuleSnapshot(String ruleSnapshot) { this.ruleSnapshot = ruleSnapshot; }
+    public String getSafetyAgreementVersion() { return safetyAgreementVersion; }
+    public void setSafetyAgreementVersion(String safetyAgreementVersion) { this.safetyAgreementVersion = safetyAgreementVersion; }
+    public Date getSafetyAgreedTime() { return safetyAgreedTime; }
+    public void setSafetyAgreedTime(Date safetyAgreedTime) { this.safetyAgreedTime = safetyAgreedTime; }
     public String getMallOrderIds() { return mallOrderIds; }
     public void setMallOrderIds(String mallOrderIds) { this.mallOrderIds = mallOrderIds; }
     public String getCancelReason() { return cancelReason; }

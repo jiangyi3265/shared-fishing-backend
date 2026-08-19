@@ -28,6 +28,8 @@ public class FishUserServiceImpl implements IFishUserService
     @Override
     public FishUser loginOrRegister(String openid, String nickname, String avatar)
     {
+        nickname = normalizeNickname(nickname);
+        avatar = normalizeAvatar(avatar);
         FishUser existing = userMapper.selectFishUserByOpenid(openid);
         if (existing != null)
         {
@@ -73,5 +75,21 @@ public class FishUserServiceImpl implements IFishUserService
         u.setIsBlacklist(blacklist ? 1 : 0);
         u.setBlacklistReason(blacklist ? (reason == null ? "" : reason) : "");
         return userMapper.updateFishUser(u);
+    }
+
+    private String normalizeNickname(String nickname)
+    {
+        if (nickname == null) return null;
+        String normalized = nickname.trim();
+        if (normalized.isEmpty()) return null;
+        return normalized.length() > 60 ? normalized.substring(0, 60) : normalized;
+    }
+
+    private String normalizeAvatar(String avatar)
+    {
+        if (avatar == null) return null;
+        String normalized = avatar.trim();
+        if (normalized.isEmpty()) return null;
+        return normalized.length() > 500 ? normalized.substring(0, 500) : normalized;
     }
 }

@@ -144,6 +144,22 @@ public class AppApiController
         return AjaxResult.success(data);
     }
 
+    /** 用户主动填写或选择微信昵称后保存，不进行静默抓取。 */
+    @PostMapping("/profile")
+    public AjaxResult updateProfile(@RequestBody Map<String, String> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        String nickname = body == null || body.get("nickname") == null ? "" : body.get("nickname").trim();
+        if (nickname.isEmpty()) return AjaxResult.error("请填写昵称");
+        if (nickname.length() > 60) return AjaxResult.error("昵称过长");
+        FishUser update = new FishUser();
+        update.setUserId(userId);
+        update.setNickname(nickname);
+        userService.updateFishUser(update);
+        return AjaxResult.success(userService.selectFishUserByUserId(userId));
+    }
+
     /** 小程序业务媒体上传，使用小程序自己的 app token 校验。 */
     @PostMapping("/media/upload")
     public AjaxResult uploadMedia(@RequestParam("file") MultipartFile file) throws Exception
@@ -227,6 +243,13 @@ public class AppApiController
         if (userId == null) return unauthorized();
         Long bodyUserId = parseLong(bodyValue(body, "userId"));
         if (bodyUserId != null && !bodyUserId.equals(userId)) return unauthorized();
+        String safetyAgreementVersion = bodyValue(body, "safetyAgreementVersion") == null
+                ? "" : String.valueOf(bodyValue(body, "safetyAgreementVersion")).trim();
+        boolean safetyAgreed = Boolean.parseBoolean(String.valueOf(bodyValue(body, "safetyAgreed")));
+        if (!safetyAgreed || !IFishOrderService.SAFETY_AGREEMENT_VERSION.equals(safetyAgreementVersion))
+        {
+            throw new ServiceException("请先阅读并同意当前版本的垂钓安全协议");
+        }
 
         Long requestedVenueId = parseLong(bodyValue(body, "venueId"));
         Long venueId;
@@ -259,7 +282,8 @@ public class AppApiController
         {
             throw new ServiceException("请扫描当前计时钓位的二维码");
         }
-        return AjaxResult.success(orderService.startOrder(userId, venueId, spotId));
+        return AjaxResult.success(orderService.startOrder(userId, venueId, spotId,
+                safetyAgreementVersion, safetyAgreed));
     }
 
     /** 查询进行中订单（带实时费用） */
@@ -317,6 +341,20 @@ public class AppApiController
             }
         }
         return AjaxResult.success(orderService.finishOrder(userId));
+    }
+
+    /** 撤销未支付的收竿结算并继续计时 */
+    @Anonymous
+    @PostMapping("/order/resume")
+    public AjaxResult resumeOrder(@RequestBody Map<String, Object> body)
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        Long bodyUserId = parseLong(body.get("userId"));
+        Long orderId = parseLong(body.get("orderId"));
+        if (bodyUserId != null && !bodyUserId.equals(userId)) return unauthorized();
+        if (orderId == null) return AjaxResult.error("订单参数缺失");
+        return AjaxResult.success(orderService.resumeOrder(userId, orderId));
     }
 
     /** 支付（支持带 mallOrderIds 一并合并支付；支持 useBalance 余额抵扣） */
@@ -398,7 +436,7 @@ public class AppApiController
                 else if (orderNo.startsWith("M")) mallService.markPaid(orderNo, tradeNo);
                 else if (orderNo.startsWith("W")) weighService.markPaid(orderNo, tradeNo);
                 else if (orderNo.startsWith("A")) regService.pay(parseLong(orderNo.substring(1)));
-                else orderService.markPaid(orderNo, tradeNo);
+                else orderService.markPaid(orderNo, tradeNo, cb.amountCents);
             }
             res.put("code", "SUCCESS"); res.put("message", "成功");
         } catch (Exception e) {

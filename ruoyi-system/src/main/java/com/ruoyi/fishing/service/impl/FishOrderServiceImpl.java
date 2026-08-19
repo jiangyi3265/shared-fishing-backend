@@ -26,6 +26,7 @@ import com.ruoyi.fishing.service.IFishUserService;
 import com.ruoyi.fishing.domain.FishBalanceLog;
 import com.ruoyi.fishing.service.IFishMemberLevelService;
 import com.ruoyi.fishing.service.IFishPointsService;
+import com.ruoyi.fishing.service.IWxPayService;
 import com.ruoyi.fishing.util.BillingCalculator;
 
 @Service
@@ -65,6 +66,9 @@ public class FishOrderServiceImpl implements IFishOrderService
     @Autowired
     private IFishMemberLevelService memberLevelService;
 
+    @Autowired
+    private IWxPayService wxPayService;
+
     @Override
     public FishOrder selectFishOrderByOrderId(Long orderId) { return orderMapper.selectFishOrderByOrderId(orderId); }
 
@@ -83,8 +87,13 @@ public class FishOrderServiceImpl implements IFishOrderService
     @Override
     @Transactional
     @SuppressWarnings("unchecked")
-    public FishOrder startOrder(Long userId, Long venueId, Long spotId)
+    public FishOrder startOrder(Long userId, Long venueId, Long spotId,
+            String safetyAgreementVersion, boolean safetyAgreed)
     {
+        if (!safetyAgreed || !IFishOrderService.SAFETY_AGREEMENT_VERSION.equals(safetyAgreementVersion))
+        {
+            throw new ServiceException("请先阅读并同意当前版本的垂钓安全协议");
+        }
         userService.assertNotBlacklisted(userId);
 
         // Redis 分布式锁：同一用户 5 秒内不能重复发起
@@ -120,6 +129,8 @@ public class FishOrderServiceImpl implements IFishOrderService
             o.setAmountCents(0);
             o.setDiscountCents(0);
             o.setRuleSnapshot(buildRuleSnapshot(rule));
+            o.setSafetyAgreementVersion(safetyAgreementVersion);
+            o.setSafetyAgreedTime(now);
             orderMapper.insertFishOrder(o);
             return o;
         } finally {
@@ -157,6 +168,35 @@ public class FishOrderServiceImpl implements IFishOrderService
         running.setDurationSeconds(r.billableDurationSeconds);
         running.setAmountCents(r.amountCents);
         orderMapper.updateFishOrder(running);
+        return running;
+    }
+
+    @Override
+    @Transactional
+    public FishOrder resumeOrder(Long userId, Long orderId)
+    {
+        FishOrder order = orderMapper.selectFishOrderByOrderId(orderId);
+        if (order == null) throw new ServiceException("订单不存在");
+        if (!order.getUserId().equals(userId)) throw new ServiceException("订单不属于当前用户");
+        if (order.getStatus() == 1) return order;
+        if (order.getStatus() == 3) throw new ServiceException("订单已经支付，不能继续垂钓");
+        if (order.getStatus() != 2) throw new ServiceException("当前订单不能恢复计时");
+
+        // amountPaid 在真实预支付创建前写入；只有用户已经点过支付时才需要微信关单。
+        // 未调起过支付的订单可立即恢复，避免无意义的外部请求。
+        if (order.getAmountPaid() != null && order.getAmountPaid() > 0)
+        {
+            wxPayService.closeOrder(order.getOrderNo());
+        }
+
+        int resumed = orderMapper.resumePendingOrder(orderId, userId);
+        if (resumed == 0) throw new ServiceException("订单状态已变更，请刷新后重试");
+        if (order.getCouponId() != null)
+        {
+            couponMapper.releaseCoupon(order.getCouponId(), order.getOrderId());
+        }
+        FishOrder running = orderMapper.selectFishOrderByOrderId(orderId);
+        if (running == null) throw new ServiceException("恢复计时失败，请联系工作人员");
         return running;
     }
 
@@ -331,10 +371,29 @@ public class FishOrderServiceImpl implements IFishOrderService
     @Transactional
     public FishOrder markPaid(String orderNo, String tradeNo)
     {
+        return markPaid(orderNo, tradeNo, null);
+    }
+
+    @Override
+    @Transactional
+    public FishOrder markPaid(String orderNo, String tradeNo, Integer paidAmountCents)
+    {
         FishOrder order = orderMapper.selectFishOrderByOrderNo(orderNo);
         if (order == null) return null;
         if (order.getStatus() == 3) return order;
+        if (order.getStatus() != 2 && order.getStatus() != 0)
+        {
+            throw new ServiceException("订单已恢复计时或状态不允许支付");
+        }
         Integer expectedStatus = order.getStatus();
+        if (paidAmountCents != null)
+        {
+            int expectedAmount = order.getAmountPaid() == null ? 0 : order.getAmountPaid();
+            if (expectedAmount <= 0 || paidAmountCents.intValue() != expectedAmount)
+            {
+                throw new ServiceException("支付金额与订单应付金额不一致");
+            }
+        }
         // 优先信任 preparePayment 写入的 amountPaid（含商城金额，不含余额抵扣）
         if (order.getAmountPaid() == null || order.getAmountPaid() <= 0)
         {

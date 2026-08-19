@@ -474,6 +474,8 @@ CREATE TABLE `fish_order` (
   `paid_time`        DATETIME     DEFAULT NULL            COMMENT '支付时间',
   `pay_trade_no`     VARCHAR(64)  DEFAULT ''              COMMENT '支付流水号',
   `rule_snapshot`    TEXT         DEFAULT NULL            COMMENT '计费规则快照',
+  `safety_agreement_version` VARCHAR(32) DEFAULT NULL      COMMENT '下竿前确认的安全协议版本',
+  `safety_agreed_time` DATETIME   DEFAULT NULL             COMMENT '安全协议确认时间',
   `cancel_reason`    VARCHAR(255) DEFAULT ''              COMMENT '取消原因',
   `create_by`        VARCHAR(64)  DEFAULT ''              COMMENT '创建者',
   `create_time`      DATETIME     DEFAULT NULL            COMMENT '创建时间',
