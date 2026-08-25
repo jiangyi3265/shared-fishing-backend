@@ -124,13 +124,13 @@ create table if not exists fish_card_progress (
   key idx_card_progress_status (round_id, status)
 ) engine=innodb default charset=utf8mb4 comment '电子鱼卡收集进度';
 
--- 四、龙水湖篇活动与 10 张鱼卡
+-- 四、龙水湖篇活动：6种常见鱼 + 4张待解锁鱼卡
 insert ignore into fish_card_campaign
   (campaign_key, venue_id, title, subtitle, rules, start_time, end_time, reward_cents, status)
 values
   ('smart-fish-atlas-longshuihu-2026', 1, '极智鱼鉴 · 龙水湖篇',
-   '集齐 10 张鱼卡，单轮奖励 66 元，可无限刷新',
-   '清晰拍摄钓获、说出鱼种，并记录完整放回鱼塘过程；后台审核通过后鱼卡点亮。',
+   '集齐6种常见鱼，获得66元奖励',
+   '认证鱼种：小白条、鲫鱼、鲤鱼、草鱼、花鲢、黄辣丁。清晰拍摄钓获、说出鱼种，并记录完整放回鱼塘过程；后台审核通过后鱼卡点亮。',
    '2026-08-01 00:00:00', '2026-10-30 23:59:59', 6600, '0');
 
 set @fish_card_campaign_id := (
@@ -139,16 +139,16 @@ set @fish_card_campaign_id := (
 );
 
 insert ignore into fish_card_species (campaign_id, species_name, card_image, sort_num, status) values
-(@fish_card_campaign_id, '鲤鱼',   '/static/fish-card-atlas.png', 1,  '0'),
-(@fish_card_campaign_id, '草鱼',   '/static/fish-card-atlas.png', 2,  '0'),
-(@fish_card_campaign_id, '花鲢',   '/static/fish-card-atlas.png', 3,  '0'),
-(@fish_card_campaign_id, '黄辣丁', '/static/fish-card-atlas.png', 4,  '0'),
-(@fish_card_campaign_id, '鳊鱼',   '/static/fish-card-atlas.png', 5,  '0'),
-(@fish_card_campaign_id, '鲈鱼',   '/static/fish-card-atlas.png', 6,  '0'),
-(@fish_card_campaign_id, '翘嘴',   '/static/fish-card-atlas.png', 7,  '0'),
-(@fish_card_campaign_id, '鳜鱼',   '/static/fish-card-atlas.png', 8,  '0'),
-(@fish_card_campaign_id, '青鱼',   '/static/fish-card-atlas.png', 9,  '0'),
-(@fish_card_campaign_id, '黑鱼',   '/static/fish-card-atlas.png', 10, '0');
+(@fish_card_campaign_id, '小白条', '/static/fish-card-atlas.png', 1,  '0'),
+(@fish_card_campaign_id, '鲫鱼',   '/static/fish-card-atlas.png', 2,  '0'),
+(@fish_card_campaign_id, '鲤鱼',   '/static/fish-card-atlas.png', 3,  '0'),
+(@fish_card_campaign_id, '草鱼',   '/static/fish-card-atlas.png', 4,  '0'),
+(@fish_card_campaign_id, '花鲢',   '/static/fish-card-atlas.png', 5,  '0'),
+(@fish_card_campaign_id, '黄辣丁', '/static/fish-card-atlas.png', 6,  '0'),
+(@fish_card_campaign_id, '翘嘴',   '/static/fish-card-atlas.png', 101, '1'),
+(@fish_card_campaign_id, '鳜鱼',   '/static/fish-card-atlas.png', 102, '1'),
+(@fish_card_campaign_id, '青鱼',   '/static/fish-card-atlas.png', 103, '1'),
+(@fish_card_campaign_id, '黑鱼',   '/static/fish-card-atlas.png', 104, '1');
 
 -- 五、管理后台“鱼鉴奖励”菜单
 set @fish_parent := (select menu_id from sys_menu where menu_name = '钓场管理' limit 1);
@@ -166,3 +166,10 @@ insert into sys_menu
 select '奖励发放', @fish_card_menu, 1, '#', '', 1, 0, 'F',
        '0', '0', 'fishing:fishCard:pay', '#', 'admin', sysdate(), '', null, ''
 where not exists (select 1 from sys_menu where perms = 'fishing:fishCard:pay');
+
+insert into sys_menu
+  (menu_name, parent_id, order_num, path, component, is_frame, is_cache, menu_type,
+   visible, status, perms, icon, create_by, create_time, update_by, update_time, remark)
+select '鱼鉴审核', @fish_card_menu, 2, '#', '', 1, 0, 'F',
+       '0', '0', 'fishing:fishCard:audit', '#', 'admin', sysdate(), '', null, ''
+where not exists (select 1 from sys_menu where perms = 'fishing:fishCard:audit');

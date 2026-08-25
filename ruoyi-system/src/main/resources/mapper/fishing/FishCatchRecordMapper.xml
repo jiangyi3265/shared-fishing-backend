@@ -48,6 +48,8 @@
             <if test="status != null">AND c.status = #{status}</if>
             <if test="isFeatured != null">AND c.is_featured = #{isFeatured}</if>
             <if test="fishSpecies != null and fishSpecies != ''">AND c.fish_species like concat('%', #{fishSpecies}, '%')</if>
+            <if test="nickname != null and nickname != ''">AND u.nickname like concat('%', #{nickname}, '%')</if>
+            <if test="cardOnly != null and cardOnly">AND c.card_round_id is not null</if>
         </where>
         order by c.create_time desc
     </select>

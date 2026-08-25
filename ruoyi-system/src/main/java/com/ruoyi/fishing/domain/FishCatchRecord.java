@@ -43,6 +43,8 @@ public class FishCatchRecord extends BaseEntity
 
     // 前端辅助
     private Boolean liked;
+    /** 管理端查询条件：仅电子鱼鉴认证记录，不映射数据库字段。 */
+    private Boolean cardOnly;
 
     public Long getCatchId() { return catchId; }
     public void setCatchId(Long catchId) { this.catchId = catchId; }
@@ -88,4 +90,6 @@ public class FishCatchRecord extends BaseEntity
     public void setDelFlag(String delFlag) { this.delFlag = delFlag; }
     public Boolean getLiked() { return liked; }
     public void setLiked(Boolean liked) { this.liked = liked; }
+    public Boolean getCardOnly() { return cardOnly; }
+    public void setCardOnly(Boolean cardOnly) { this.cardOnly = cardOnly; }
 }

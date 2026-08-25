@@ -57,6 +57,7 @@
         <include refid="vo"/>
         <where>
             <if test="weighNo != null and weighNo != ''">AND o.weigh_no like concat('%', #{weighNo}, '%')</if>
+            <if test="nickname != null and nickname != ''">AND u.nickname like concat('%', #{nickname}, '%')</if>
             <if test="userId != null">AND o.user_id = #{userId}</if>
             <if test="venueId != null">AND o.venue_id = #{venueId}</if>
             <if test="status != null">AND o.status = #{status}</if>

@@ -13,7 +13,9 @@ import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.fishing.domain.FishOrder;
+import com.ruoyi.fishing.domain.FishWeighOrder;
 import com.ruoyi.fishing.service.IFishOrderService;
+import com.ruoyi.fishing.service.IFishWeighService;
 
 /**
  * 订单管理
@@ -24,6 +26,9 @@ public class FishOrderController extends BaseController
 {
     @Autowired
     private IFishOrderService orderService;
+
+    @Autowired
+    private IFishWeighService weighService;
 
     @PreAuthorize("@ss.hasPermi('fishing:order:list')")
     @GetMapping("/list")
@@ -41,6 +46,34 @@ public class FishOrderController extends BaseController
         List<FishOrder> list = orderService.selectFishOrderList(order);
         ExcelUtil<FishOrder> util = new ExcelUtil<>(FishOrder.class);
         util.exportExcel(response, list, "订单数据");
+    }
+
+    /**
+     * 称重付款记录。称重单存放在独立表中，通过订单管理页的“称重付款”页签统一查看。
+     */
+    @PreAuthorize("@ss.hasPermi('fishing:order:list')")
+    @GetMapping("/weigh/list")
+    public TableDataInfo weighList(FishWeighOrder order)
+    {
+        startPage();
+        return getDataTable(weighService.selectList(order));
+    }
+
+    @PreAuthorize("@ss.hasPermi('fishing:order:export')")
+    @Log(title = "称重订单", businessType = BusinessType.EXPORT)
+    @PostMapping("/weigh/export")
+    public void exportWeigh(HttpServletResponse response, FishWeighOrder order)
+    {
+        List<FishWeighOrder> list = weighService.selectList(order);
+        ExcelUtil<FishWeighOrder> util = new ExcelUtil<>(FishWeighOrder.class);
+        util.exportExcel(response, list, "称重付款数据");
+    }
+
+    @PreAuthorize("@ss.hasPermi('fishing:order:query')")
+    @GetMapping("/weigh/{fishWeighId}")
+    public AjaxResult getWeighInfo(@PathVariable Long fishWeighId)
+    {
+        return success(weighService.selectById(fishWeighId));
     }
 
     @PreAuthorize("@ss.hasPermi('fishing:order:query')")

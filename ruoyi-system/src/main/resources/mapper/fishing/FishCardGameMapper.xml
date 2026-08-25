@@ -29,6 +29,15 @@
         order by sort_num asc, species_id asc
     </select>
 
+    <select id="selectSpeciesForDisplay" resultType="java.util.HashMap">
+        select species_id as speciesId, campaign_id as campaignId, species_name as speciesName,
+               card_image as cardImage, sort_num as sortNum, status
+        from fish_card_species
+        where campaign_id = #{campaignId}
+        order by case when status = '0' then 0 else 1 end, sort_num asc, species_id asc
+        limit 10
+    </select>
+
     <select id="selectSpeciesById" resultType="java.util.HashMap">
         select species_id as speciesId, campaign_id as campaignId, species_name as speciesName,
                card_image as cardImage, sort_num as sortNum, status
@@ -113,7 +122,10 @@
     </update>
 
     <select id="countApproved" resultType="int">
-        select count(*) from fish_card_progress where round_id = #{roundId} and status = 1
+        select count(*)
+        from fish_card_progress p
+        inner join fish_card_species s on s.species_id = p.species_id and s.status = '0'
+        where p.round_id = #{roundId} and p.status = 1
     </select>
 
     <update id="completeRound">

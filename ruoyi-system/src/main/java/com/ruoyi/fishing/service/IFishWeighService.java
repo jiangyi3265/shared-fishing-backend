@@ -30,6 +30,12 @@ public interface IFishWeighService
     /** 标记已支付（微信回调 / mock）。幂等。 */
     FishWeighOrder markPaid(String weighNo, String tradeNo);
 
+    /**
+     * 标记已支付并校验微信回调金额。paidAmountCents 为空时仅用于本地 mock；
+     * 真实微信回调必须传入实际支付金额。
+     */
+    FishWeighOrder markPaid(String weighNo, String tradeNo, Integer paidAmountCents);
+
     /** 余额全额支付：扣余额并标记完成。 */
     FishWeighOrder payByBalance(Long userId, Long fishWeighId);
 

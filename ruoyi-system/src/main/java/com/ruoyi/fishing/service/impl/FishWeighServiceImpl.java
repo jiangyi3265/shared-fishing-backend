@@ -86,10 +86,26 @@ public class FishWeighServiceImpl implements IFishWeighService
     @Transactional
     public FishWeighOrder markPaid(String weighNo, String tradeNo)
     {
+        return markPaid(weighNo, tradeNo, null);
+    }
+
+    @Override
+    @Transactional
+    public FishWeighOrder markPaid(String weighNo, String tradeNo, Integer paidAmountCents)
+    {
         FishWeighOrder o = weighMapper.selectByWeighNo(weighNo);
         if (o == null) return null;
         if (o.getStatus() != null && o.getStatus() == 1) return o; // 幂等
         if (o.getStatus() == null || o.getStatus() != 0) return o;
+
+        if (paidAmountCents != null)
+        {
+            int expectedAmount = o.getAmountCents() == null ? 0 : o.getAmountCents();
+            if (expectedAmount <= 0 || paidAmountCents.intValue() != expectedAmount)
+            {
+                throw new ServiceException("支付金额与称重订单应付金额不一致");
+            }
+        }
 
         int g = weighMapper.updateStatusWithGuard(o.getFishWeighId(), 0, 1);
         if (g == 0) return weighMapper.selectById(o.getFishWeighId());

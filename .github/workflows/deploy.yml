@@ -162,6 +162,7 @@ jobs:
             "${RELEASE_DIR}/sql/migration-2026-08-01-visible-content.sql"
             "${RELEASE_DIR}/sql/migration-2026-08-06-mall-funds-reservation.sql"
             "${RELEASE_DIR}/sql/migration-2026-08-16-safety-agreement.sql"
+            "${RELEASE_DIR}/sql/migration-2026-08-24-fish-card-six-species.sql"
           )
           ENV_FILE="${DEPLOY_DIR}/.env.production"
           for migration_file in "${MIGRATION_FILES[@]}"; do
@@ -256,13 +257,15 @@ jobs:
           COMPETITION_COUNT="$(mysql_scalar "select count(*) from fish_competition where status in (0, 1)")"
           CAMPAIGN_COUNT="$(mysql_scalar "select count(*) from fish_card_campaign where status = '0'")"
           SPECIES_COUNT="$(mysql_scalar "select count(*) from fish_card_species where status = '0'")"
+          SPECIES_DISPLAY_COUNT="$(mysql_scalar "select count(*) from fish_card_species")"
           MALL_RESERVE_COLUMN="$(mysql_scalar "select count(*) from information_schema.COLUMNS where TABLE_SCHEMA = DATABASE() and TABLE_NAME = 'fish_mall_order' and COLUMN_NAME = 'funds_reserved'")"
-          echo "Seed verification: spots=${SPOT_COUNT}, spot_qrcodes=${QRCODE_COUNT}, competitions=${COMPETITION_COUNT}, fish_card_campaigns=${CAMPAIGN_COUNT}, fish_card_species=${SPECIES_COUNT}."
+          echo "Seed verification: spots=${SPOT_COUNT}, spot_qrcodes=${QRCODE_COUNT}, competitions=${COMPETITION_COUNT}, fish_card_campaigns=${CAMPAIGN_COUNT}, active_fish_card_species=${SPECIES_COUNT}, display_fish_card_species=${SPECIES_DISPLAY_COUNT}."
           test "${SPOT_COUNT}" -ge 20
           test "${QRCODE_COUNT}" -ge 20
           test "${COMPETITION_COUNT}" -ge 1
           test "${CAMPAIGN_COUNT}" -ge 1
-          test "${SPECIES_COUNT}" -ge 10
+          test "${SPECIES_COUNT}" -eq 6
+          test "${SPECIES_DISPLAY_COUNT}" -ge 10
           test "${MALL_RESERVE_COLUMN}" -eq 1
           unset DB_PASSWORD MYSQL_PWD
           echo "Database backup, migrations and seed verification completed."

@@ -8,7 +8,10 @@ public interface FishCardGameMapper
 {
     Map<String, Object> selectActiveCampaign();
     Map<String, Object> selectCampaignById(Long campaignId);
+    /** 当前可参与并计入集齐奖励的鱼种。 */
     List<Map<String, Object>> selectSpecies(Long campaignId);
+    /** 鱼鉴页面展示卡片：可参与鱼种优先，其余显示为待解锁，最多十张。 */
+    List<Map<String, Object>> selectSpeciesForDisplay(Long campaignId);
     Map<String, Object> selectSpeciesById(@Param("campaignId") Long campaignId,
                                           @Param("speciesId") Long speciesId);
 

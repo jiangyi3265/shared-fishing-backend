@@ -32,6 +32,8 @@ public class FishCardGameServiceImpl implements IFishCardGameService
         if (campaign == null) throw new ServiceException("当前没有开放中的鱼卡活动");
         Long campaignId = asLong(campaign.get("campaignId"));
         List<Map<String, Object>> species = mapper.selectSpecies(campaignId);
+        List<Map<String, Object>> displaySpecies = mapper.selectSpeciesForDisplay(campaignId);
+        if (displaySpecies == null || displaySpecies.isEmpty()) displaySpecies = species;
         Map<String, Object> round = mapper.selectOpenRound(campaignId, userId);
 
         int roundNo = 1;
@@ -59,12 +61,13 @@ public class FishCardGameServiceImpl implements IFishCardGameService
         int obtained = 0;
         int pending = 0;
         List<Map<String, Object>> cards = new ArrayList<>();
-        for (Map<String, Object> fish : species)
+        for (Map<String, Object> fish : displaySpecies)
         {
             Map<String, Object> card = new HashMap<>(fish);
-            Map<String, Object> hit = findProgress(progress, asLong(fish.get("speciesId")));
-            String cardStatus = "locked";
-            if (hit != null)
+            boolean available = isActiveSpecies(species, asLong(fish.get("speciesId")));
+            Map<String, Object> hit = available ? findProgress(progress, asLong(fish.get("speciesId"))) : null;
+            String cardStatus = available ? "locked" : "unavailable";
+            if (available && hit != null)
             {
                 int status = asInt(hit.get("status"), 0);
                 if (status == 1) { cardStatus = "obtained"; obtained++; }
@@ -72,6 +75,7 @@ public class FishCardGameServiceImpl implements IFishCardGameService
                 else { cardStatus = "pending"; pending++; }
                 card.putAll(hit);
             }
+            card.put("available", available);
             card.put("cardStatus", cardStatus);
             cards.add(card);
         }
@@ -94,6 +98,17 @@ public class FishCardGameServiceImpl implements IFishCardGameService
         result.put("cards", cards);
         result.put("ranking", mapper.selectRanking(campaignId));
         return result;
+    }
+
+    private boolean isActiveSpecies(List<Map<String, Object>> species, Long speciesId)
+    {
+        if (species == null || speciesId == null) return false;
+        for (Map<String, Object> fish : species)
+        {
+            Long activeId = asLong(fish.get("speciesId"));
+            if (speciesId.equals(activeId)) return true;
+        }
+        return false;
     }
 
     @Override

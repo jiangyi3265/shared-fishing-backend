@@ -434,7 +434,7 @@ public class AppApiController
             {
                 if (orderNo.startsWith("R")) balanceService.markRechargePaid(orderNo, tradeNo);
                 else if (orderNo.startsWith("M")) mallService.markPaid(orderNo, tradeNo);
-                else if (orderNo.startsWith("W")) weighService.markPaid(orderNo, tradeNo);
+                else if (orderNo.startsWith("W")) weighService.markPaid(orderNo, tradeNo, cb.amountCents);
                 else if (orderNo.startsWith("A")) regService.pay(parseLong(orderNo.substring(1)));
                 else orderService.markPaid(orderNo, tradeNo, cb.amountCents);
             }
