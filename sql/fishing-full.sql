@@ -600,6 +600,7 @@ INSERT INTO sys_menu VALUES (2031, '订单查询', 2030, 1, '', '', '', '', 1, 0
 INSERT INTO sys_menu VALUES (2032, '人工结束', 2030, 2, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:order:finish', '#', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_menu VALUES (2033, '订单取消', 2030, 3, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:order:cancel', '#', 'admin', sysdate(), '', null, '');
 INSERT INTO sys_menu VALUES (2034, '订单导出', 2030, 4, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:order:export', '#', 'admin', sysdate(), '', null, '');
+INSERT INTO sys_menu VALUES (2035, '鱼获订单', 2000, 4, 'weighOrder', 'fishing/order/index', '', '', 1, 0, 'C', '0', '0', 'fishing:order:list', 'money', 'admin', sysdate(), '', null, '称重付款订单独立入口');
 
 INSERT INTO sys_menu VALUES (2040, '轮播图管理', 2000, 4, 'ad', 'fishing/ad/index', '', '', 1, 0, 'C', '0', '0', 'fishing:ad:list', 'guide', 'admin', sysdate(), '', null, '轮播图与活动管理菜单');
 INSERT INTO sys_menu VALUES (2041, '广告查询', 2040, 1, '', '', '', '', 1, 0, 'F', '0', '0', 'fishing:ad:query', '#', 'admin', sysdate(), '', null, '');
