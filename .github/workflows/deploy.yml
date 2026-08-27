@@ -263,10 +263,14 @@ jobs:
           FISH_CARD_PENDING_COUNT="$(mysql_scalar "select count(*) from fish_catch_record where del_flag = '0' and status = 0 and (card_round_id is not null or card_species_id is not null or fishing_method = '电子鱼卡' or (video_url is not null and trim(video_url) != ''))")"
           FISH_CARD_PROGRESS_COUNT="$(mysql_scalar "select count(*) from fish_card_progress")"
           FISH_CARD_ORPHAN_PROGRESS_COUNT="$(mysql_scalar "select count(*) from fish_card_progress p left join fish_catch_record c on c.catch_id = p.catch_id where c.catch_id is null")"
+          FISH_CARD_LIST_MENU_COUNT="$(mysql_scalar "select count(*) from sys_menu where perms = 'fishing:fishCard:list' and status = '0'")"
+          FISH_CARD_AUDIT_MENU_COUNT="$(mysql_scalar "select count(*) from sys_menu where perms = 'fishing:fishCard:audit' and status = '0'")"
+          FISH_CARD_PAY_MENU_COUNT="$(mysql_scalar "select count(*) from sys_menu where perms = 'fishing:fishCard:pay' and status = '0'")"
           WEIGH_MENU_COUNT="$(mysql_scalar "select count(*) from sys_menu where path = 'weighOrder' and menu_type = 'C' and status = '0'")"
           MALL_RESERVE_COLUMN="$(mysql_scalar "select count(*) from information_schema.COLUMNS where TABLE_SCHEMA = DATABASE() and TABLE_NAME = 'fish_mall_order' and COLUMN_NAME = 'funds_reserved'")"
           echo "Seed verification: spots=${SPOT_COUNT}, spot_qrcodes=${QRCODE_COUNT}, competitions=${COMPETITION_COUNT}, fish_card_campaigns=${CAMPAIGN_COUNT}, active_fish_card_species=${SPECIES_COUNT}, display_fish_card_species=${SPECIES_DISPLAY_COUNT}."
           echo "Fish card verification: review_records=${FISH_CARD_REVIEW_COUNT}, pending_reviews=${FISH_CARD_PENDING_COUNT}, progress_records=${FISH_CARD_PROGRESS_COUNT}, orphan_progress=${FISH_CARD_ORPHAN_PROGRESS_COUNT}."
+          echo "Fish card admin permissions: list=${FISH_CARD_LIST_MENU_COUNT}, audit=${FISH_CARD_AUDIT_MENU_COUNT}, pay=${FISH_CARD_PAY_MENU_COUNT}."
           test "${SPOT_COUNT}" -ge 20
           test "${QRCODE_COUNT}" -ge 20
           test "${COMPETITION_COUNT}" -ge 1
@@ -274,6 +278,9 @@ jobs:
           test "${SPECIES_COUNT}" -eq 6
           test "${SPECIES_DISPLAY_COUNT}" -ge 10
           test "${FISH_CARD_ORPHAN_PROGRESS_COUNT}" -eq 0
+          test "${FISH_CARD_LIST_MENU_COUNT}" -ge 1
+          test "${FISH_CARD_AUDIT_MENU_COUNT}" -ge 1
+          test "${FISH_CARD_PAY_MENU_COUNT}" -ge 1
           test "${WEIGH_MENU_COUNT}" -eq 1
           test "${MALL_RESERVE_COLUMN}" -eq 1
           unset DB_PASSWORD MYSQL_PWD
