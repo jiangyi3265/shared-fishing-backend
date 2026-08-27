@@ -167,7 +167,7 @@ public class AppApiController
         Long userId = currentUserId();
         if (userId == null) return unauthorized();
         String fileName = FileUploadUtils.upload(RuoYiConfig.getUploadPath(), file,
-                new String[] { "bmp", "gif", "jpg", "jpeg", "png", "mp4", "avi", "rmvb" });
+                new String[] { "bmp", "gif", "jpg", "jpeg", "png", "mp4", "mov", "m4v", "avi", "rmvb" });
         Map<String, Object> data = new HashMap<>();
         data.put("fileName", fileName);
         return AjaxResult.success(data);
@@ -1163,6 +1163,22 @@ public class AppApiController
         Long speciesId = parseLong(body.get("speciesId"));
         String videoUrl = body.get("videoUrl") == null ? "" : String.valueOf(body.get("videoUrl"));
         if (speciesId == null) return AjaxResult.error("请选择鱼种");
+        return AjaxResult.success(cardGameService.submit(userId, speciesId, videoUrl));
+    }
+
+    /**
+     * 鱼鉴视频上传与审核单创建合并为一次请求。
+     * 避免客户端完成文件上传后，第二个“创建审核单”请求中断，造成后台没有记录。
+     */
+    @PostMapping("/fish-card/submit-video")
+    public AjaxResult submitFishCardVideo(@RequestParam("file") MultipartFile file,
+                                          @RequestParam("speciesId") Long speciesId) throws Exception
+    {
+        Long userId = currentUserId();
+        if (userId == null) return unauthorized();
+        if (speciesId == null) return AjaxResult.error("请选择鱼种");
+        String videoUrl = FileUploadUtils.upload(RuoYiConfig.getUploadPath(), file,
+                new String[] { "mp4", "mov", "m4v", "avi", "rmvb" });
         return AjaxResult.success(cardGameService.submit(userId, speciesId, videoUrl));
     }
 
