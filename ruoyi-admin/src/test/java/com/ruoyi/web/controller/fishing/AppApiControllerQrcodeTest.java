@@ -65,21 +65,28 @@ public class AppApiControllerQrcodeTest
     }
 
     @Test
-    public void startWithoutScanUsesActiveDefaultVenue()
+    public void startWithoutScanIsRejected()
     {
-        FishVenue venue = venue(VENUE_ID);
-        when(venueService.selectFishVenueList(any(FishVenue.class)))
-                .thenReturn(Collections.singletonList(venue));
-        FishOrder started = runningOrder(VENUE_ID);
-        when(orderService.startOrder(USER_ID, VENUE_ID, null,
-                IFishOrderService.SAFETY_AGREEMENT_VERSION, true)).thenReturn(started);
+        ServiceException error = assertServiceException(() -> controller.startOrder(safetyBody()));
 
-        AjaxResult result = controller.startOrder(safetyBody());
-
-        assertSame(started, result.get(AjaxResult.DATA_TAG));
-        verify(orderService).startOrder(USER_ID, VENUE_ID, null,
-                IFishOrderService.SAFETY_AGREEMENT_VERSION, true);
+        assertTrue(error.getMessage().contains("扫描现场钓位二维码"));
+        verify(orderService, never()).startOrder(any(Long.class), any(Long.class), any(Long.class),
+                anyString(), anyBoolean());
         verify(qrcodeMapper, never()).selectFishQrcodeByQrId(any(Long.class));
+    }
+
+    @Test
+    public void startQrWithoutBoundSpotIsRejected()
+    {
+        FishQrcode qr = qrcode(30L, VENUE_ID, FishQrcode.TYPE_COMMON);
+        qr.setSceneValue("action=common&venueId=" + VENUE_ID);
+        when(qrcodeMapper.selectFishQrcodeByQrId(30L)).thenReturn(qr);
+
+        ServiceException error = assertServiceException(() -> controller.startOrder(qrBody(30L)));
+
+        assertTrue(error.getMessage().contains("未绑定具体钓位"));
+        verify(orderService, never()).startOrder(any(Long.class), any(Long.class), any(Long.class),
+                anyString(), anyBoolean());
     }
 
     @Test
@@ -142,8 +149,16 @@ public class AppApiControllerQrcodeTest
     @SuppressWarnings("unchecked")
     public void commonQrResolvesToStartWhenNoOrderIsRunning()
     {
+        Long spotId = 12L;
         FishQrcode qr = qrcode(32L, VENUE_ID, FishQrcode.TYPE_COMMON);
+        qr.setSceneValue("action=common&venueId=" + VENUE_ID + "&spotId=" + spotId);
+        FishSpot spot = new FishSpot();
+        spot.setSpotId(spotId);
+        spot.setVenueId(VENUE_ID);
+        spot.setSpotName("12号钓位");
+        spot.setStatus("0");
         when(qrcodeMapper.selectFishQrcodeByQrId(32L)).thenReturn(qr);
+        when(spotService.selectById(spotId)).thenReturn(spot);
 
         AjaxResult result = controller.resolveQrcode(32L, null);
 

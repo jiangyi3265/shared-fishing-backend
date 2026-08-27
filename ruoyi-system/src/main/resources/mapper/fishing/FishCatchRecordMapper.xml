@@ -49,7 +49,14 @@
             <if test="isFeatured != null">AND c.is_featured = #{isFeatured}</if>
             <if test="fishSpecies != null and fishSpecies != ''">AND c.fish_species like concat('%', #{fishSpecies}, '%')</if>
             <if test="nickname != null and nickname != ''">AND u.nickname like concat('%', #{nickname}, '%')</if>
-            <if test="cardOnly != null and cardOnly">AND c.card_round_id is not null</if>
+            <if test="cardOnly != null and cardOnly">
+                AND (
+                    c.card_round_id is not null
+                    OR c.card_species_id is not null
+                    OR c.fishing_method = '电子鱼卡'
+                    OR (c.video_url is not null and trim(c.video_url) != '')
+                )
+            </if>
         </where>
         order by c.create_time desc
     </select>

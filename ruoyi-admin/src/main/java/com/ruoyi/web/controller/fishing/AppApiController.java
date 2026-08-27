@@ -251,27 +251,23 @@ public class AppApiController
             throw new ServiceException("请先阅读并同意当前版本的垂钓安全协议");
         }
 
+        if (!hasScanCredential(body))
+        {
+            throw new ServiceException("请扫描现场钓位二维码后开始计时");
+        }
+
         Long requestedVenueId = parseLong(bodyValue(body, "venueId"));
-        Long venueId;
-        Long spotId = null;
-        if (hasScanCredential(body))
+        FishQrcode qr = requireActiveQrcode(body);
+        if (!isStartCapable(qr)) throw new ServiceException("离场码不能用于下竿计时");
+        if (qr.getVenueId() == null) throw new ServiceException("二维码未绑定钓场");
+        if (requestedVenueId != null && !requestedVenueId.equals(qr.getVenueId()))
         {
-            FishQrcode qr = requireActiveQrcode(body);
-            if (!isStartCapable(qr)) throw new ServiceException("离场码不能用于下竿计时");
-            if (qr.getVenueId() == null) throw new ServiceException("二维码未绑定钓场");
-            if (requestedVenueId != null && !requestedVenueId.equals(qr.getVenueId()))
-            {
-                throw new ServiceException("二维码与当前钓场不匹配");
-            }
-            venueId = qr.getVenueId();
-            FishSpot spot = requireBoundSpot(qr);
-            if (spot != null) spotId = spot.getSpotId();
+            throw new ServiceException("二维码与当前钓场不匹配");
         }
-        else
-        {
-            venueId = resolveDefaultVenueId(requestedVenueId);
-            if (venueId == null) throw new ServiceException("暂无可用钓场");
-        }
+        Long venueId = qr.getVenueId();
+        FishSpot spot = requireBoundSpot(qr);
+        if (spot == null) throw new ServiceException("二维码未绑定具体钓位，请联系钓场管理员");
+        Long spotId = spot.getSpotId();
 
         FishOrder running = orderService.selectRunningOrder(userId);
         if (running != null && (running.getVenueId() == null || !venueId.equals(running.getVenueId())))
@@ -488,6 +484,7 @@ public class AppApiController
         }
         else if (isStartCapable(qr))
         {
+            if (spot == null) return AjaxResult.error("二维码未绑定具体钓位，请联系钓场管理员");
             action = "start";
         }
         else
