@@ -4,6 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertFalse;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
@@ -26,15 +28,19 @@ public class FishCardGameServiceImplTest
 {
     private FishCardGameServiceImpl service;
     private FishCardGameMapper mapper;
+    private FishCatchRecordMapper catchMapper;
+    private IFishUserService userService;
 
     @Before
     public void setUp() throws Exception
     {
         service = new FishCardGameServiceImpl();
         mapper = mock(FishCardGameMapper.class);
+        catchMapper = mock(FishCatchRecordMapper.class);
+        userService = mock(IFishUserService.class);
         setField("mapper", mapper);
-        setField("catchMapper", mock(FishCatchRecordMapper.class));
-        setField("userService", mock(IFishUserService.class));
+        setField("catchMapper", catchMapper);
+        setField("userService", userService);
     }
 
     @Test
@@ -92,6 +98,47 @@ public class FishCardGameServiceImplTest
         assertEquals(10, cards.size());
         assertFalse((Boolean) cards.get(9).get("available"));
         assertEquals("unavailable", cards.get(9).get("cardStatus"));
+    }
+
+    @Test
+    public void submitPersistsReviewRecordAndLinksProgress()
+    {
+        Long campaignId = 8L;
+        Long userId = 3L;
+        Long speciesId = 2L;
+        Long roundId = 21L;
+        Map<String, Object> campaign = new HashMap<>();
+        campaign.put("campaignId", campaignId);
+        campaign.put("venueId", 1L);
+        campaign.put("startTime", new Date(System.currentTimeMillis() - 60_000L));
+        campaign.put("endTime", new Date(System.currentTimeMillis() + 60_000L));
+        Map<String, Object> fish = new HashMap<>();
+        fish.put("speciesId", speciesId);
+        fish.put("speciesName", "鲫鱼");
+        Map<String, Object> round = new HashMap<>();
+        round.put("roundId", roundId);
+        round.put("roundNo", 1);
+
+        when(mapper.selectActiveCampaign()).thenReturn(campaign);
+        when(mapper.selectSpeciesById(campaignId, speciesId)).thenReturn(fish);
+        when(mapper.selectOpenRound(campaignId, userId)).thenReturn(round);
+        when(mapper.selectProgress(roundId, speciesId)).thenReturn(null);
+        doAnswer(invocation -> {
+            com.ruoyi.fishing.domain.FishCatchRecord record = invocation.getArgument(0);
+            record.setCatchId(99L);
+            return 1;
+        }).when(catchMapper).insert(org.mockito.ArgumentMatchers.any(com.ruoyi.fishing.domain.FishCatchRecord.class));
+
+        com.ruoyi.fishing.domain.FishCatchRecord record = service.submit(userId, speciesId, "/profile/upload/card.mp4");
+
+        assertEquals(Long.valueOf(99L), record.getCatchId());
+        assertEquals("鲫鱼", record.getFishSpecies());
+        assertEquals("电子鱼卡", record.getFishingMethod());
+        assertEquals(roundId, record.getCardRoundId());
+        assertEquals(speciesId, record.getCardSpeciesId());
+        assertEquals(Integer.valueOf(0), record.getStatus());
+        verify(catchMapper).insert(record);
+        verify(mapper).upsertProgress(roundId, speciesId, 99L);
     }
 
     private List<Map<String, Object>> species(int from, int to, String status)
