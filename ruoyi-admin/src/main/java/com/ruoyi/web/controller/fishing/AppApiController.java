@@ -3,6 +3,7 @@ package com.ruoyi.web.controller.fishing;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
@@ -1100,6 +1101,37 @@ public class AppApiController
         return AjaxResult.error(401, "请先登录");
     }
 
+    /**
+     * 清洗客户端提供的诊断字段，避免超长内容或换行符污染应用日志。
+     */
+    private String safeLogValue(Object value, int maxLength, String fallback)
+    {
+        if (value == null) return fallback;
+        String raw = String.valueOf(value).trim();
+        if (raw.isEmpty()) return fallback;
+        StringBuilder sanitized = new StringBuilder(Math.min(raw.length(), maxLength));
+        for (int i = 0; i < raw.length() && sanitized.length() < maxLength; i++)
+        {
+            char ch = raw.charAt(i);
+            sanitized.append(Character.isISOControl(ch) ? ' ' : ch);
+        }
+        String result = sanitized.toString().trim();
+        return result.isEmpty() ? fallback : result;
+    }
+
+    private String uploadAttemptId(Object value)
+    {
+        String attemptId = safeLogValue(value, 80, "");
+        return attemptId.isEmpty() ? "server-" + UUID.randomUUID().toString() : attemptId;
+    }
+
+    private Long boundedNonNegativeLong(Object value, long maxValue)
+    {
+        Long parsed = parseLong(value);
+        if (parsed == null || parsed < 0 || parsed > maxValue) return null;
+        return parsed;
+    }
+
     // ===== 钓位预订 =====
 
     @Anonymous
@@ -1175,34 +1207,123 @@ public class AppApiController
      * 避免客户端完成文件上传后，第二个“创建审核单”请求中断，造成后台没有记录。
      */
     @PostMapping("/fish-card/submit-video")
-    public AjaxResult submitFishCardVideo(@RequestParam("file") MultipartFile file,
-                                          @RequestParam("speciesId") Long speciesId) throws Exception
+    public AjaxResult submitFishCardVideo(
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "speciesId", required = false) String speciesIdValue,
+            @RequestParam(value = "attemptId", required = false) String uploadAttemptParam,
+            @RequestParam(value = "clientVersion", required = false) String miniProgramVersionParam,
+            @RequestParam(value = "envVersion", required = false) String miniProgramEnvParam,
+            @RequestHeader(value = "X-Upload-Attempt-Id", required = false) String uploadAttemptHeader,
+            @RequestHeader(value = "X-MiniProgram-Version", required = false) String miniProgramVersionHeader,
+            @RequestHeader(value = "X-MiniProgram-Env", required = false) String miniProgramEnvHeader) throws Exception
     {
-        Long userId = currentUserId();
-        if (userId == null) return unauthorized();
-        if (speciesId == null) return AjaxResult.error("请选择鱼种");
-        if (file == null || file.isEmpty()) return AjaxResult.error("请选择需要上传的认证视频");
-        log.info("Fish card upload started: userId={}, speciesId={}, size={}, contentType={}, originalName={}",
-                userId, speciesId, file.getSize(), file.getContentType(), file.getOriginalFilename());
-        String videoUrl = FileUploadUtils.upload(RuoYiConfig.getUploadPath(), file,
-                new String[] { "mp4", "mov", "m4v", "avi", "rmvb" });
+        String attemptId = uploadAttemptId(uploadAttemptHeader == null ? uploadAttemptParam : uploadAttemptHeader);
+        String miniProgramVersion = safeLogValue(
+                miniProgramVersionHeader == null ? miniProgramVersionParam : miniProgramVersionHeader, 40, "-");
+        String miniProgramEnv = safeLogValue(
+                miniProgramEnvHeader == null ? miniProgramEnvParam : miniProgramEnvHeader, 20, "-");
+        String originalName = safeLogValue(file == null ? null : file.getOriginalFilename(), 160, "-");
+        String contentType = safeLogValue(file == null ? null : file.getContentType(), 100, "-");
+        long fileSize = file == null ? -1L : file.getSize();
+        String stage = "received";
+        Long userId = null;
+        Long speciesId = null;
+        String videoUrl = null;
+
+        log.info("Fish card upload received: attemptId={}, version={}, env={}, speciesIdRaw={}, hasFile={}, size={}, contentType={}, originalName={}",
+                attemptId, miniProgramVersion, miniProgramEnv, safeLogValue(speciesIdValue, 40, "-"),
+                file != null, fileSize, contentType, originalName);
         try
         {
+            stage = "authenticate";
+            userId = currentUserId();
+            if (userId == null)
+            {
+                log.warn("Fish card upload rejected: attemptId={}, stage={}, reason=unauthorized, version={}, env={}",
+                        attemptId, stage, miniProgramVersion, miniProgramEnv);
+                return unauthorized();
+            }
+
+            stage = "validate";
+            speciesId = parseLong(speciesIdValue);
+            if (speciesId == null)
+            {
+                log.warn("Fish card upload rejected: attemptId={}, userId={}, stage={}, reason=invalid_species, speciesIdRaw={}",
+                        attemptId, userId, stage, safeLogValue(speciesIdValue, 40, "-"));
+                return AjaxResult.error("请选择鱼种");
+            }
+            if (file == null || file.isEmpty())
+            {
+                log.warn("Fish card upload rejected: attemptId={}, userId={}, stage={}, reason={}",
+                        attemptId, userId, stage, file == null ? "missing_file" : "empty_file");
+                return AjaxResult.error("请选择需要上传的认证视频");
+            }
+
+            log.info("Fish card upload started: attemptId={}, userId={}, speciesId={}, version={}, env={}, size={}, contentType={}, originalName={}",
+                    attemptId, userId, speciesId, miniProgramVersion, miniProgramEnv, fileSize, contentType, originalName);
+            stage = "store_file";
+            videoUrl = FileUploadUtils.upload(RuoYiConfig.getUploadPath(), file,
+                    new String[] { "mp4", "mov", "m4v", "avi", "rmvb" });
+
+            stage = "create_review_record";
             com.ruoyi.fishing.domain.FishCatchRecord record = cardGameService.submit(userId, speciesId, videoUrl);
             if (record == null || record.getCatchId() == null)
             {
                 throw new ServiceException("鱼鉴审核记录创建失败，请重试");
             }
-            log.info("Fish card upload completed: userId={}, speciesId={}, catchId={}, videoUrl={}",
-                    userId, speciesId, record.getCatchId(), videoUrl);
+            stage = "complete";
+            log.info("Fish card upload completed: attemptId={}, userId={}, speciesId={}, catchId={}, videoUrl={}, version={}, env={}",
+                    attemptId, userId, speciesId, record.getCatchId(), videoUrl,
+                    miniProgramVersion, miniProgramEnv);
             return AjaxResult.success(record);
         }
         catch (Exception e)
         {
-            log.error("Fish card upload failed after file saved: userId={}, speciesId={}, videoUrl={}",
-                    userId, speciesId, videoUrl, e);
+            log.error("Fish card upload failed: attemptId={}, userId={}, speciesId={}, stage={}, videoUrl={}, version={}, env={}, reason={}",
+                    attemptId, userId, speciesId, stage, safeLogValue(videoUrl, 300, "-"),
+                    miniProgramVersion, miniProgramEnv, safeLogValue(e.getMessage(), 300, e.getClass().getSimpleName()), e);
             throw e;
         }
+    }
+
+    /**
+     * 真机 uploadFile 在客户端阶段失败时，通过普通 request 回传一条诊断日志。
+     * 仅写应用日志，不保存业务数据，也不接收令牌或视频内容。
+     */
+    @PostMapping("/fish-card/upload-diagnostic")
+    public AjaxResult fishCardUploadDiagnostic(@RequestBody(required = false) Map<String, Object> body)
+    {
+        Object attemptValue = bodyValue(body, "attemptId");
+        if (attemptValue == null) attemptValue = request.getHeader("X-Upload-Attempt-Id");
+        String attemptId = uploadAttemptId(attemptValue);
+        String stage = safeLogValue(bodyValue(body, "stage"), 40, "unknown");
+        String clientMessage = safeLogValue(bodyValue(body, "clientMessage"), 300, "-");
+        Object versionValue = bodyValue(body, "clientVersion");
+        if (versionValue == null) versionValue = bodyValue(body, "version");
+        if (versionValue == null) versionValue = request.getHeader("X-MiniProgram-Version");
+        Object envValue = bodyValue(body, "envVersion");
+        if (envValue == null) envValue = bodyValue(body, "env");
+        if (envValue == null) envValue = request.getHeader("X-MiniProgram-Env");
+        String version = safeLogValue(versionValue, 40, "-");
+        String env = safeLogValue(envValue, 20, "-");
+        Long speciesId = boundedNonNegativeLong(bodyValue(body, "speciesId"), Long.MAX_VALUE);
+        Long fileSize = boundedNonNegativeLong(bodyValue(body, "fileSize"), 1024L * 1024L * 1024L);
+        Long duration = boundedNonNegativeLong(bodyValue(body, "duration"), 24L * 60L * 60L * 1000L);
+        Long userId = currentUserId();
+
+        if (userId == null)
+        {
+            log.warn("Fish card client diagnostic rejected: attemptId={}, stage={}, version={}, env={}, reason=unauthorized, clientMessage={}",
+                    attemptId, stage, version, env, clientMessage);
+            return unauthorized();
+        }
+
+        log.info("Fish card client diagnostic: userId={}, attemptId={}, stage={}, version={}, env={}, speciesId={}, fileSize={}, duration={}, clientMessage={}",
+                userId, attemptId, stage, version, env, speciesId, fileSize, duration, clientMessage);
+        Map<String, Object> response = new HashMap<>();
+        response.put("received", true);
+        response.put("attemptId", attemptId);
+        return AjaxResult.success(response);
     }
 
     // ===== 会员等级 =====

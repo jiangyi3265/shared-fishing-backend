@@ -1,5 +1,7 @@
 package com.ruoyi.common.utils.file;
 
+import java.util.Locale;
+
 /**
  * 媒体类型工具类
  * 
@@ -48,7 +50,12 @@ public class MimeTypeUtils
 
     public static String getExtension(String prefix)
     {
-        switch (prefix)
+        if (prefix == null)
+        {
+            return "";
+        }
+        String mimeType = prefix.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
+        switch (mimeType)
         {
             case IMAGE_PNG:
                 return "png";
@@ -61,9 +68,12 @@ public class MimeTypeUtils
             case IMAGE_GIF:
                 return "gif";
             case VIDEO_MP4:
+            case "application/mp4":
                 return "mp4";
             case VIDEO_QUICKTIME:
                 return "mov";
+            case "video/x-m4v":
+                return "m4v";
             case VIDEO_X_MSVIDEO:
             case VIDEO_AVI:
                 return "avi";

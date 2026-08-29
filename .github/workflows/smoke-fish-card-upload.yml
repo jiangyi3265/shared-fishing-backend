@@ -109,14 +109,20 @@ jobs:
           signature="$(printf '%s' "${payload}" | openssl dgst -sha256 -hmac "${TOKEN_SECRET}" -binary | base64 | tr '+/' '-_' | tr -d '=\n')"
           token="app.${payload}.${signature}"
 
-          # Deliberately omit a filename extension. WeChat may upload a temporary file as
-          # filename="file" and rely on video/mp4, which must still be accepted.
+          # Deliberately omit both the filename extension and explicit MIME. Some WeChat
+          # clients send filename="file" with application/octet-stream; the MP4 header
+          # must still be recognized without accepting arbitrary binary content.
           printf '\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom' > "${TMP_DIR}/wechat-video"
           response_file="${TMP_DIR}/submit.json"
+          attempt_id="FC-SMOKE-${suffix}"
           http_status="$(curl -sS -o "${response_file}" -w '%{http_code}' \
             -H "Authorization: Bearer ${token}" \
+            -H "X-Upload-Attempt-Id: ${attempt_id}" \
+            -H "X-MiniProgram-Version: smoke-test" \
+            -H "X-MiniProgram-Env: ci" \
             -F "speciesId=${SPECIES_ID}" \
-            -F "file=@${TMP_DIR}/wechat-video;type=video/mp4;filename=file" \
+            -F "attemptId=${attempt_id}" \
+            -F "file=@${TMP_DIR}/wechat-video;filename=file" \
             http://127.0.0.1:8080/app/fish-card/submit-video)"
           test "${http_status}" = '200'
 
@@ -158,6 +164,20 @@ jobs:
           test "${public_status}" = '200'
           test -s "${TMP_DIR}/downloaded-video"
 
+          diagnostic_file="${TMP_DIR}/diagnostic.json"
+          curl -fsS -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' \
+            --data "{\"stage\":\"smoke\",\"attemptId\":\"${attempt_id}\",\"clientMessage\":\"diagnostic endpoint check\",\"clientVersion\":\"smoke-test\",\"envVersion\":\"ci\",\"speciesId\":${SPECIES_ID},\"fileSize\":24,\"duration\":1}" \
+            http://127.0.0.1:8080/app/fish-card/upload-diagnostic > "${diagnostic_file}"
+          python3 - "${diagnostic_file}" "${attempt_id}" <<'PY'
+          import json, sys
+          with open(sys.argv[1], encoding='utf-8') as fh:
+              body = json.load(fh)
+          assert body.get('code') == 200, body
+          data = body.get('data') or {}
+          assert data.get('received') is True, data
+          assert data.get('attemptId') == sys.argv[2], data
+          PY
+
           echo "production_e2e=passed"
-          echo "verified_steps=upload,record_insert,progress_link,app_readback,admin_query,public_playback"
+          echo "verified_steps=generic_mime_upload,attempt_trace,record_insert,progress_link,app_readback,admin_query,public_playback,client_diagnostic"
           REMOTE

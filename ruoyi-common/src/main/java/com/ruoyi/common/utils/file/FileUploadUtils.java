@@ -2,8 +2,9 @@ package com.ruoyi.common.utils.file;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Paths;
-import java.util.Objects;
+import java.util.Locale;
 import org.apache.commons.io.FilenameUtils;
 import org.springframework.web.multipart.MultipartFile;
 import com.ruoyi.common.config.RuoYiConfig;
@@ -123,15 +124,17 @@ public class FileUploadUtils
             throws FileSizeLimitExceededException, IOException, FileNameLengthLimitExceededException,
             InvalidExtensionException
     {
-        int fileNameLength = Objects.requireNonNull(file.getOriginalFilename()).length();
+        String originalFilename = safeOriginalFilename(file);
+        int fileNameLength = originalFilename.length();
         if (fileNameLength > FileUploadUtils.DEFAULT_FILE_NAME_LENGTH)
         {
             throw new FileNameLengthLimitExceededException(FileUploadUtils.DEFAULT_FILE_NAME_LENGTH);
         }
 
-        assertAllowed(file, allowedExtension);
+        String extension = getExtension(file);
+        assertAllowed(file, allowedExtension, extension);
 
-        String fileName = useCustomNaming ? uuidFilename(file) : extractFilename(file);
+        String fileName = useCustomNaming ? uuidFilename(extension) : extractFilename(originalFilename, extension);
 
         String absPath = getAbsoluteFile(baseDir, fileName).getAbsolutePath();
         file.transferTo(Paths.get(absPath));
@@ -143,7 +146,18 @@ public class FileUploadUtils
      */
     public static final String extractFilename(MultipartFile file)
     {
-        return StringUtils.format("{}/{}_{}.{}", DateUtils.datePath(), FilenameUtils.getBaseName(file.getOriginalFilename()), Seq.getId(Seq.uploadSeqType), getExtension(file));
+        return extractFilename(safeOriginalFilename(file), getExtension(file));
+    }
+
+    private static String extractFilename(String originalFilename, String extension)
+    {
+        String baseName = FilenameUtils.getBaseName(originalFilename);
+        if (StringUtils.isEmpty(baseName))
+        {
+            baseName = "upload";
+        }
+        return StringUtils.format("{}/{}_{}.{}", DateUtils.datePath(), baseName,
+                Seq.getId(Seq.uploadSeqType), extension);
     }
 
     /**
@@ -151,7 +165,12 @@ public class FileUploadUtils
      */
     public static final String uuidFilename(MultipartFile file)
     {
-        return StringUtils.format("{}/{}.{}", DateUtils.datePath(), IdUtils.fastSimpleUUID(), getExtension(file));
+        return uuidFilename(getExtension(file));
+    }
+
+    private static String uuidFilename(String extension)
+    {
+        return StringUtils.format("{}/{}.{}", DateUtils.datePath(), IdUtils.fastSimpleUUID(), extension);
     }
 
     public static final File getAbsoluteFile(String uploadDir, String fileName) throws IOException
@@ -186,14 +205,18 @@ public class FileUploadUtils
     public static final void assertAllowed(MultipartFile file, String[] allowedExtension)
             throws FileSizeLimitExceededException, InvalidExtensionException
     {
+        assertAllowed(file, allowedExtension, getExtension(file));
+    }
+
+    private static void assertAllowed(MultipartFile file, String[] allowedExtension, String extension)
+            throws FileSizeLimitExceededException, InvalidExtensionException
+    {
         long size = file.getSize();
         if (size > DEFAULT_MAX_SIZE)
         {
             throw new FileSizeLimitExceededException(DEFAULT_MAX_SIZE / 1024 / 1024);
         }
-
-        String fileName = file.getOriginalFilename();
-        String extension = getExtension(file);
+        String fileName = safeOriginalFilename(file);
         if (allowedExtension != null && !isAllowedExtension(extension, allowedExtension))
         {
             if (allowedExtension == MimeTypeUtils.IMAGE_EXTENSION)
@@ -250,11 +273,76 @@ public class FileUploadUtils
      */
     public static final String getExtension(MultipartFile file)
     {
-        String extension = FilenameUtils.getExtension(file.getOriginalFilename());
+        if (file == null)
+        {
+            return "";
+        }
+
+        String extension = FilenameUtils.getExtension(safeOriginalFilename(file));
         if (StringUtils.isEmpty(extension))
         {
-            extension = MimeTypeUtils.getExtension(Objects.requireNonNull(file.getContentType()));
+            extension = MimeTypeUtils.getExtension(file.getContentType());
         }
-        return extension;
+        if (StringUtils.isEmpty(extension))
+        {
+            extension = detectVideoExtension(file);
+        }
+        return extension == null ? "" : extension.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 微信真机在部分系统上会把临时视频作为 filename="file"，并省略 MIME
+     * 或统一标记为 application/octet-stream。此时读取容器头识别常见视频，
+     * 不能把任意未知二进制盲目当作 mp4。
+     */
+    private static String detectVideoExtension(MultipartFile file)
+    {
+        byte[] header = new byte[12];
+        int offset = 0;
+        try (InputStream input = file.getInputStream())
+        {
+            while (offset < header.length)
+            {
+                int count = input.read(header, offset, header.length - offset);
+                if (count < 0) break;
+                offset += count;
+            }
+        }
+        catch (Exception ignored)
+        {
+            return "";
+        }
+
+        if (offset >= 12 && asciiEquals(header, 0, "RIFF") && asciiEquals(header, 8, "AVI "))
+        {
+            return "avi";
+        }
+        if (offset >= 12 && asciiEquals(header, 4, "ftyp"))
+        {
+            return asciiEquals(header, 8, "qt  ") ? "mov" : "mp4";
+        }
+        return "";
+    }
+
+    private static boolean asciiEquals(byte[] bytes, int offset, String expected)
+    {
+        if (bytes == null || expected == null || offset < 0 || bytes.length - offset < expected.length())
+        {
+            return false;
+        }
+        for (int i = 0; i < expected.length(); i++)
+        {
+            if ((bytes[offset + i] & 0xff) != expected.charAt(i)) return false;
+        }
+        return true;
+    }
+
+    private static String safeOriginalFilename(MultipartFile file)
+    {
+        if (file == null || file.getOriginalFilename() == null)
+        {
+            return "";
+        }
+        return file.getOriginalFilename().trim();
     }
 }
