@@ -101,6 +101,12 @@ jobs:
           fi
           if [ -n "${access_log}" ]; then
             tail -n 50000 "${access_log}" | awk '$7 ~ /\/app\/fish-card\/submit-video/ {count[$9]++; total++} END {printf "nginx_submit_video_hits=%d", total+0; for (code in count) printf ", http_%s=%d", code, count[code]; printf "\n"}'
+            tail -n 50000 "${access_log}" | awk '
+              $7 ~ /\/app\/(fish-card\/submit-video|fish-card\/submit|fish-card\/my|media\/upload)/ {
+                path=$7; sub(/\?.*/, "", path); count[path]++; latest[path]=$4
+              }
+              END { for (path in count) printf "request_path=%s, hits=%d, latest=%s\n", path, count[path], latest[path] }
+            '
           else
             echo "nginx_submit_video_hits=unknown (access log not readable)"
           fi
@@ -109,6 +115,9 @@ jobs:
           if [ -r "${app_log}" ]; then
             MULTIPART_ERRORS="$(tail -n 50000 "${app_log}" | grep -Eic 'MaxUploadSize|MultipartException|SizeLimitExceeded|FileSizeLimitExceeded' || true)"
             echo "recent_multipart_errors=${MULTIPART_ERRORS}"
+            echo "fish_card_log_started=$(tail -n 50000 "${app_log}" | grep -c 'Fish card upload started' || true)"
+            echo "fish_card_log_completed=$(tail -n 50000 "${app_log}" | grep -c 'Fish card upload completed' || true)"
+            echo "fish_card_log_failed=$(tail -n 50000 "${app_log}" | grep -c 'Fish card upload failed' || true)"
           else
             echo "recent_multipart_errors=unknown (application log not readable)"
           fi
@@ -170,6 +179,12 @@ jobs:
           fi
           if [ -n "${access_log}" ]; then
             tail -n 50000 "${access_log}" | awk '$7 ~ /\/app\/fish-card\/submit-video/ {count[$9]++; total++} END {printf "nginx_submit_video_hits=%d", total+0; for (code in count) printf ", http_%s=%d", code, count[code]; printf "\n"}'
+            tail -n 50000 "${access_log}" | awk '
+              $7 ~ /\/app\/(fish-card\/submit-video|fish-card\/submit|fish-card\/my|media\/upload)/ {
+                path=$7; sub(/\?.*/, "", path); count[path]++; latest[path]=$4
+              }
+              END { for (path in count) printf "request_path=%s, hits=%d, latest=%s\n", path, count[path], latest[path] }
+            '
           else
             echo "nginx_submit_video_hits=unknown (access log not readable)"
           fi
@@ -178,6 +193,9 @@ jobs:
           if [ -r "${app_log}" ]; then
             MULTIPART_ERRORS="$(tail -n 50000 "${app_log}" | grep -Eic 'MaxUploadSize|MultipartException|SizeLimitExceeded|FileSizeLimitExceeded' || true)"
             echo "recent_multipart_errors=${MULTIPART_ERRORS}"
+            echo "fish_card_log_started=$(tail -n 50000 "${app_log}" | grep -c 'Fish card upload started' || true)"
+            echo "fish_card_log_completed=$(tail -n 50000 "${app_log}" | grep -c 'Fish card upload completed' || true)"
+            echo "fish_card_log_failed=$(tail -n 50000 "${app_log}" | grep -c 'Fish card upload failed' || true)"
           else
             echo "recent_multipart_errors=unknown (application log not readable)"
           fi
