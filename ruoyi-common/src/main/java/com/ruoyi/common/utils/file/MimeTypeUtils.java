@@ -16,6 +16,14 @@ public class MimeTypeUtils
     public static final String IMAGE_BMP = "image/bmp";
 
     public static final String IMAGE_GIF = "image/gif";
+
+    public static final String VIDEO_MP4 = "video/mp4";
+
+    public static final String VIDEO_QUICKTIME = "video/quicktime";
+
+    public static final String VIDEO_X_MSVIDEO = "video/x-msvideo";
+
+    public static final String VIDEO_AVI = "video/avi";
     
     public static final String[] IMAGE_EXTENSION = { "bmp", "gif", "jpg", "jpeg", "png" };
 
@@ -52,6 +60,13 @@ public class MimeTypeUtils
                 return "bmp";
             case IMAGE_GIF:
                 return "gif";
+            case VIDEO_MP4:
+                return "mp4";
+            case VIDEO_QUICKTIME:
+                return "mov";
+            case VIDEO_X_MSVIDEO:
+            case VIDEO_AVI:
+                return "avi";
             default:
                 return "";
         }

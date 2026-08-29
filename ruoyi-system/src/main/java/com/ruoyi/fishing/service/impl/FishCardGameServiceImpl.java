@@ -159,8 +159,16 @@ public class FishCardGameServiceImpl implements IFishCardGameService
         record.setCardRoundId(roundId);
         record.setCardSpeciesId(speciesId);
         record.setStatus(0);
-        catchMapper.insert(record);
-        mapper.upsertProgress(roundId, speciesId, record.getCatchId());
+        int inserted = catchMapper.insert(record);
+        if (inserted != 1 || record.getCatchId() == null)
+        {
+            throw new ServiceException("鱼鉴审核记录创建失败，请重试");
+        }
+        int linked = mapper.upsertProgress(roundId, speciesId, record.getCatchId());
+        if (linked < 1)
+        {
+            throw new ServiceException("鱼鉴审核进度关联失败，请重试");
+        }
         return record;
     }
 

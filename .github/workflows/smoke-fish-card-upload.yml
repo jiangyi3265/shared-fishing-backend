@@ -1,0 +1,163 @@
+name: Smoke Fish Card Upload
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install SSH helper
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Verify production upload, database, query and playback chain
+        timeout-minutes: 5
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${SSH_HOST:?Missing SSH_HOST secret}"
+          : "${SSH_USER:?Missing SSH_USER secret}"
+          SSH_PORT="${SSH_PORT:-22}"
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          if [ -n "${SSH_PRIVATE_KEY:-}" ]; then
+            printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            ssh_cmd=(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=20 -p "${SSH_PORT}")
+          else
+            : "${SSH_PASSWORD:?Set SSH_PRIVATE_KEY or SSH_PASSWORD}"
+            export SSHPASS="${SSH_PASSWORD}"
+            ssh_cmd=(sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 -p "${SSH_PORT}")
+          fi
+
+          "${ssh_cmd[@]}" "${SSH_USER}@${SSH_HOST}" "bash -s" <<'REMOTE'
+          set -euo pipefail
+          DEPLOY_DIR=/www/wwwroot/dyjava
+          ENV_FILE="${DEPLOY_DIR}/.env.production"
+
+          read_env_value() {
+            local key="$1"
+            local value
+            value="$(sed -n "s/^${key}=//p" "${ENV_FILE}" | tail -n 1)"
+            case "${value}" in
+              \"*\") value="${value#\"}"; value="${value%\"}" ;;
+              \'*\') value="${value#\'}"; value="${value%\'}" ;;
+            esac
+            printf '%s' "${value}"
+          }
+
+          DB_HOST="$(read_env_value DB_HOST)"
+          DB_PORT="$(read_env_value DB_PORT)"
+          DB_NAME="$(read_env_value DB_NAME)"
+          DB_USER="$(read_env_value DB_USER)"
+          DB_PASSWORD="$(read_env_value DB_PASSWORD)"
+          TOKEN_SECRET="$(read_env_value TOKEN_SECRET)"
+          UPLOAD_PROFILE="$(read_env_value RUOYI_PROFILE)"
+          DB_HOST="${DB_HOST:-127.0.0.1}"
+          DB_PORT="${DB_PORT:-3306}"
+          TOKEN_SECRET="${TOKEN_SECRET:-local-dev-token-secret-change-before-production}"
+          MYSQL_BIN="$(command -v mysql || command -v mariadb)"
+          TMP_DIR="$(mktemp -d)"
+          TEST_USER_ID=''
+          VIDEO_URL=''
+
+          mysql_exec() {
+            MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_BIN}" --protocol=TCP --host="${DB_HOST}" --port="${DB_PORT}" \
+              --user="${DB_USER}" --default-character-set=utf8mb4 --batch --skip-column-names "${DB_NAME}" -e "$1"
+          }
+
+          cleanup() {
+            set +e
+            if [ -n "${TEST_USER_ID}" ]; then
+              mysql_exec "delete p from fish_card_progress p join fish_card_round r on r.round_id=p.round_id where r.user_id=${TEST_USER_ID};"
+              mysql_exec "delete from fish_catch_record where user_id=${TEST_USER_ID} and fishing_method='电子鱼卡';"
+              mysql_exec "delete from fish_card_round where user_id=${TEST_USER_ID};"
+              mysql_exec "delete from fish_user where user_id=${TEST_USER_ID} and openid like 'codex_fish_card_smoke_%';"
+            fi
+            if [ -n "${VIDEO_URL}" ] && [ -n "${UPLOAD_PROFILE}" ]; then
+              relative="${VIDEO_URL#/profile/}"
+              target="$(realpath -m "${UPLOAD_PROFILE}/${relative}")"
+              case "${target}" in
+                "${UPLOAD_PROFILE}"/*) rm -f -- "${target}" ;;
+              esac
+            fi
+            rm -rf -- "${TMP_DIR}"
+          }
+          trap cleanup EXIT
+
+          suffix="$(date +%s)_$$"
+          test_openid="codex_fish_card_smoke_${suffix}"
+          mysql_exec "insert into fish_user(openid,nickname,status,create_time) values('${test_openid}','鱼鉴链路测试','0',sysdate());"
+          TEST_USER_ID="$(mysql_exec "select user_id from fish_user where openid='${test_openid}' limit 1;")"
+          SPECIES_ID="$(mysql_exec "select s.species_id from fish_card_species s join fish_card_campaign c on c.campaign_id=s.campaign_id where s.status='0' and c.status='0' and c.start_time<=sysdate() and c.end_time>=sysdate() order by s.sort_num,s.species_id limit 1;")"
+          test -n "${TEST_USER_ID}"
+          test -n "${SPECIES_ID}"
+
+          expires_at="$(( $(date +%s%3N) + 3600000 ))"
+          payload="${TEST_USER_ID}.${expires_at}"
+          signature="$(printf '%s' "${payload}" | openssl dgst -sha256 -hmac "${TOKEN_SECRET}" -binary | base64 | tr '+/' '-_' | tr -d '=\n')"
+          token="app.${payload}.${signature}"
+
+          # Deliberately omit a filename extension. WeChat may upload a temporary file as
+          # filename="file" and rely on video/mp4, which must still be accepted.
+          printf '\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom' > "${TMP_DIR}/wechat-video"
+          response_file="${TMP_DIR}/submit.json"
+          http_status="$(curl -sS -o "${response_file}" -w '%{http_code}' \
+            -H "Authorization: Bearer ${token}" \
+            -F "speciesId=${SPECIES_ID}" \
+            -F "file=@${TMP_DIR}/wechat-video;type=video/mp4;filename=file" \
+            http://127.0.0.1:8080/app/fish-card/submit-video)"
+          test "${http_status}" = '200'
+
+          IFS=$'\t' read -r response_code TEST_CATCH_ID VIDEO_URL < <(python3 - "${response_file}" <<'PY'
+          import json, sys
+          with open(sys.argv[1], encoding='utf-8') as fh:
+              body = json.load(fh)
+          data = body.get('data') or {}
+          print(f"{body.get('code')}\t{data.get('catchId') or ''}\t{data.get('videoUrl') or ''}")
+          PY
+          )
+          test "${response_code}" = '200'
+          test -n "${TEST_CATCH_ID}"
+          test -n "${VIDEO_URL}"
+
+          record_count="$(mysql_exec "select count(*) from fish_catch_record where catch_id=${TEST_CATCH_ID} and user_id=${TEST_USER_ID} and card_species_id=${SPECIES_ID} and status=0 and video_url is not null and trim(video_url)<>'';")"
+          progress_count="$(mysql_exec "select count(*) from fish_card_progress where catch_id=${TEST_CATCH_ID} and species_id=${SPECIES_ID} and status=0;")"
+          admin_query_count="$(mysql_exec "select count(*) from fish_catch_record where catch_id=${TEST_CATCH_ID} and del_flag='0' and (card_round_id is not null or card_species_id is not null or fishing_method='电子鱼卡' or (video_url is not null and trim(video_url)<>''));")"
+          test "${record_count}" = '1'
+          test "${progress_count}" = '1'
+          test "${admin_query_count}" = '1'
+
+          game_file="${TMP_DIR}/game.json"
+          curl -fsS -H "Authorization: Bearer ${token}" http://127.0.0.1:8080/app/fish-card/my > "${game_file}"
+          python3 - "${game_file}" "${SPECIES_ID}" "${TEST_CATCH_ID}" <<'PY'
+          import json, sys
+          with open(sys.argv[1], encoding='utf-8') as fh:
+              body = json.load(fh)
+          assert body.get('code') == 200, body
+          cards = (body.get('data') or {}).get('cards') or []
+          hit = next((c for c in cards if str(c.get('speciesId')) == sys.argv[2]), None)
+          assert hit, cards
+          assert str(hit.get('catchId')) == sys.argv[3], hit
+          assert hit.get('cardStatus') == 'pending', hit
+          assert hit.get('videoUrl'), hit
+          PY
+
+          public_status="$(curl -sS -o "${TMP_DIR}/downloaded-video" -w '%{http_code}' "https://www.diaoyuus.cn${VIDEO_URL}")"
+          test "${public_status}" = '200'
+          test -s "${TMP_DIR}/downloaded-video"
+
+          echo "production_e2e=passed"
+          echo "verified_steps=upload,record_insert,progress_link,app_readback,admin_query,public_playback"
+          REMOTE

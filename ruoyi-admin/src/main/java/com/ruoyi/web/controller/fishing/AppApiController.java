@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import com.ruoyi.common.annotation.Anonymous;
@@ -58,6 +60,8 @@ import com.ruoyi.fishing.service.IWxPayService;
 @RequestMapping("/app")
 public class AppApiController
 {
+    private static final Logger log = LoggerFactory.getLogger(AppApiController.class);
+
     @Autowired
     private IFishUserService userService;
     @Autowired
@@ -1177,9 +1181,28 @@ public class AppApiController
         Long userId = currentUserId();
         if (userId == null) return unauthorized();
         if (speciesId == null) return AjaxResult.error("请选择鱼种");
+        if (file == null || file.isEmpty()) return AjaxResult.error("请选择需要上传的认证视频");
+        log.info("Fish card upload started: userId={}, speciesId={}, size={}, contentType={}, originalName={}",
+                userId, speciesId, file.getSize(), file.getContentType(), file.getOriginalFilename());
         String videoUrl = FileUploadUtils.upload(RuoYiConfig.getUploadPath(), file,
                 new String[] { "mp4", "mov", "m4v", "avi", "rmvb" });
-        return AjaxResult.success(cardGameService.submit(userId, speciesId, videoUrl));
+        try
+        {
+            com.ruoyi.fishing.domain.FishCatchRecord record = cardGameService.submit(userId, speciesId, videoUrl);
+            if (record == null || record.getCatchId() == null)
+            {
+                throw new ServiceException("鱼鉴审核记录创建失败，请重试");
+            }
+            log.info("Fish card upload completed: userId={}, speciesId={}, catchId={}, videoUrl={}",
+                    userId, speciesId, record.getCatchId(), videoUrl);
+            return AjaxResult.success(record);
+        }
+        catch (Exception e)
+        {
+            log.error("Fish card upload failed after file saved: userId={}, speciesId={}, videoUrl={}",
+                    userId, speciesId, videoUrl, e);
+            throw e;
+        }
     }
 
     // ===== 会员等级 =====

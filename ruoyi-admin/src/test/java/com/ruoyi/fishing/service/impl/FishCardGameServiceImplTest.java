@@ -128,6 +128,7 @@ public class FishCardGameServiceImplTest
             record.setCatchId(99L);
             return 1;
         }).when(catchMapper).insert(org.mockito.ArgumentMatchers.any(com.ruoyi.fishing.domain.FishCatchRecord.class));
+        when(mapper.upsertProgress(roundId, speciesId, 99L)).thenReturn(1);
 
         com.ruoyi.fishing.domain.FishCatchRecord record = service.submit(userId, speciesId, "/profile/upload/card.mp4");
 
