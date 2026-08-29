@@ -83,9 +83,12 @@ jobs:
           echo "database: review_records=${REVIEW_COUNT}, pending_reviews=${PENDING_COUNT}, progress_records=${PROGRESS_COUNT}, latest_review=${LATEST_REVIEW}"
 
           access_log=''
-          for candidate in /www/server/nginx/logs/access.log /var/log/nginx/access.log; do
+          for candidate in /www/wwwlogs/www.diaoyuus.cn.log /www/server/nginx/logs/access.log /var/log/nginx/access.log; do
             if [ -r "${candidate}" ]; then access_log="${candidate}"; break; fi
           done
+          if [ -z "${access_log}" ]; then
+            access_log="$(find /www/wwwlogs /www/server/nginx/logs /var/log/nginx -maxdepth 2 -type f -name '*access*.log' -readable 2>/dev/null | head -n 1 || true)"
+          fi
           if [ -n "${access_log}" ]; then
             tail -n 50000 "${access_log}" | awk '$7 ~ /\/app\/fish-card\/submit-video/ {count[$9]++; total++} END {printf "nginx_submit_video_hits=%d", total+0; for (code in count) printf ", http_%s=%d", code, count[code]; printf "\n"}'
           else
@@ -139,9 +142,12 @@ jobs:
           echo "database: review_records=${REVIEW_COUNT}, pending_reviews=${PENDING_COUNT}, progress_records=${PROGRESS_COUNT}, latest_review=${LATEST_REVIEW}"
 
           access_log=''
-          for candidate in /www/server/nginx/logs/access.log /var/log/nginx/access.log; do
+          for candidate in /www/wwwlogs/www.diaoyuus.cn.log /www/server/nginx/logs/access.log /var/log/nginx/access.log; do
             if [ -r "${candidate}" ]; then access_log="${candidate}"; break; fi
           done
+          if [ -z "${access_log}" ]; then
+            access_log="$(find /www/wwwlogs /www/server/nginx/logs /var/log/nginx -maxdepth 2 -type f -name '*access*.log' -readable 2>/dev/null | head -n 1 || true)"
+          fi
           if [ -n "${access_log}" ]; then
             tail -n 50000 "${access_log}" | awk '$7 ~ /\/app\/fish-card\/submit-video/ {count[$9]++; total++} END {printf "nginx_submit_video_hits=%d", total+0; for (code in count) printf ", http_%s=%d", code, count[code]; printf "\n"}'
           else
