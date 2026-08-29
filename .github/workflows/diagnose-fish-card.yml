@@ -67,6 +67,7 @@ jobs:
           DB_NAME="$(read_env_value DB_NAME)"
           DB_USER="$(read_env_value DB_USER)"
           DB_PASSWORD="$(read_env_value DB_PASSWORD)"
+          UPLOAD_PROFILE="$(read_env_value RUOYI_PROFILE)"
           DB_HOST="${DB_HOST:-127.0.0.1}"
           DB_PORT="${DB_PORT:-3306}"
           MYSQL_BIN="$(command -v mysql || command -v mariadb)"
@@ -81,6 +82,15 @@ jobs:
           PROGRESS_COUNT="$(mysql_scalar "select count(*) from fish_card_progress")"
           LATEST_REVIEW="$(mysql_scalar "select coalesce(date_format(max(create_time),'%Y-%m-%d %H:%i:%s'),'none') from fish_catch_record where del_flag='0' and (card_round_id is not null or card_species_id is not null or fishing_method='电子鱼卡')")"
           echo "database: review_records=${REVIEW_COUNT}, pending_reviews=${PENDING_COUNT}, progress_records=${PROGRESS_COUNT}, latest_review=${LATEST_REVIEW}"
+          if [ -n "${UPLOAD_PROFILE}" ]; then
+            if [ -d "${UPLOAD_PROFILE}" ] && [ -w "${UPLOAD_PROFILE}" ]; then
+              echo "upload_profile=configured_and_writable"
+            else
+              echo "upload_profile=configured_but_not_writable"
+            fi
+          else
+            echo "upload_profile=unset"
+          fi
 
           access_log=''
           for candidate in /www/wwwlogs/www.diaoyuus.cn.log /www/server/nginx/logs/access.log /var/log/nginx/access.log; do
@@ -126,6 +136,7 @@ jobs:
           DB_NAME="$(read_env_value DB_NAME)"
           DB_USER="$(read_env_value DB_USER)"
           DB_PASSWORD="$(read_env_value DB_PASSWORD)"
+          UPLOAD_PROFILE="$(read_env_value RUOYI_PROFILE)"
           DB_HOST="${DB_HOST:-127.0.0.1}"
           DB_PORT="${DB_PORT:-3306}"
           MYSQL_BIN="$(command -v mysql || command -v mariadb)"
@@ -140,6 +151,15 @@ jobs:
           PROGRESS_COUNT="$(mysql_scalar "select count(*) from fish_card_progress")"
           LATEST_REVIEW="$(mysql_scalar "select coalesce(date_format(max(create_time),'%Y-%m-%d %H:%i:%s'),'none') from fish_catch_record where del_flag='0' and (card_round_id is not null or card_species_id is not null or fishing_method='电子鱼卡')")"
           echo "database: review_records=${REVIEW_COUNT}, pending_reviews=${PENDING_COUNT}, progress_records=${PROGRESS_COUNT}, latest_review=${LATEST_REVIEW}"
+          if [ -n "${UPLOAD_PROFILE}" ]; then
+            if [ -d "${UPLOAD_PROFILE}" ] && [ -w "${UPLOAD_PROFILE}" ]; then
+              echo "upload_profile=configured_and_writable"
+            else
+              echo "upload_profile=configured_but_not_writable"
+            fi
+          else
+            echo "upload_profile=unset"
+          fi
 
           access_log=''
           for candidate in /www/wwwlogs/www.diaoyuus.cn.log /www/server/nginx/logs/access.log /var/log/nginx/access.log; do
