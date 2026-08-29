@@ -166,6 +166,13 @@ jobs:
             "${RELEASE_DIR}/sql/migration-2026-08-26-weigh-order-menu.sql"
           )
           ENV_FILE="${DEPLOY_DIR}/.env.production"
+          if ! grep -q '^RUOYI_PROFILE=' "${ENV_FILE}"; then
+            printf 'RUOYI_PROFILE=%s/uploadPath\n' "${DEPLOY_DIR}" >> "${ENV_FILE}"
+          fi
+          UPLOAD_PROFILE="$(sed -n 's/^RUOYI_PROFILE=//p' "${ENV_FILE}" | tail -n 1)"
+          UPLOAD_PROFILE="${UPLOAD_PROFILE:-${DEPLOY_DIR}/uploadPath}"
+          mkdir -p "${UPLOAD_PROFILE}/upload" "${UPLOAD_PROFILE}/avatar" "${UPLOAD_PROFILE}/download" "${UPLOAD_PROFILE}/import"
+          test -w "${UPLOAD_PROFILE}"
           for migration_file in "${MIGRATION_FILES[@]}"; do
             if [ ! -f "${migration_file}" ]; then
               echo "Database migration file is missing: ${migration_file}"

@@ -20,6 +20,11 @@ fi
 : "${CORS_ALLOWED_ORIGINS:=https://ht.diaoyuus.cn,https://www.diaoyuus.cn}"
 export CORS_ALLOWED_ORIGINS
 
+# 生产服务器必须使用 Linux 可写目录保存视频和图片；未配置时默认放在应用目录下。
+: "${RUOYI_PROFILE:=$APP_HOME/uploadPath}"
+mkdir -p "$RUOYI_PROFILE/upload" "$RUOYI_PROFILE/avatar" "$RUOYI_PROFILE/download" "$RUOYI_PROFILE/import"
+export RUOYI_PROFILE
+
 query(){
     PID=`ps -eo pid=,comm=,args= | awk -v app="$AppName" '$2 ~ /^java/ && index($0, app) {print $1; exit}'`
 }
