@@ -1,0 +1,160 @@
+name: Diagnose Fish Card Upload
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install SSH helper
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Inspect production upload pipeline
+        timeout-minutes: 5
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${SSH_HOST:?Missing SSH_HOST secret}"
+          : "${SSH_USER:?Missing SSH_USER secret}"
+          SSH_PORT="${SSH_PORT:-22}"
+
+          if [ -z "${SSH_PRIVATE_KEY:-}" ] && [ -z "${SSH_PASSWORD:-}" ]; then
+            echo "Set SSH_PRIVATE_KEY or SSH_PASSWORD in repo secrets."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh_cmd=(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -p "${SSH_PORT}")
+          if [ -n "${SSH_PRIVATE_KEY:-}" ]; then
+            printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            ssh_cmd+=(-i ~/.ssh/deploy_key)
+          fi
+          remote="${SSH_USER}@${SSH_HOST}"
+
+          if [ -n "${SSH_PRIVATE_KEY:-}" ]; then
+            "${ssh_cmd[@]}" "${remote}" "bash -s" <<'EOF'
+          set -euo pipefail
+          DEPLOY_DIR=/www/wwwroot/dyjava
+          ENV_FILE="${DEPLOY_DIR}/.env.production"
+
+          read_env_value() {
+            local key="$1"
+            local value
+            value="$(sed -n "s/^${key}=//p" "${ENV_FILE}" | tail -n 1)"
+            case "${value}" in
+              \"*\") value="${value#\"}"; value="${value%\"}" ;;
+              \'*\') value="${value#\'}"; value="${value%\'}" ;;
+            esac
+            printf '%s' "${value}"
+          }
+
+          DB_HOST="$(read_env_value DB_HOST)"
+          DB_PORT="$(read_env_value DB_PORT)"
+          DB_NAME="$(read_env_value DB_NAME)"
+          DB_USER="$(read_env_value DB_USER)"
+          DB_PASSWORD="$(read_env_value DB_PASSWORD)"
+          DB_HOST="${DB_HOST:-127.0.0.1}"
+          DB_PORT="${DB_PORT:-3306}"
+          MYSQL_BIN="$(command -v mysql || command -v mariadb)"
+
+          mysql_scalar() {
+            MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_BIN}" --protocol=TCP --host="${DB_HOST}" --port="${DB_PORT}" \
+              --user="${DB_USER}" --default-character-set=utf8mb4 --batch --skip-column-names "${DB_NAME}" -e "$1"
+          }
+
+          REVIEW_COUNT="$(mysql_scalar "select count(*) from fish_catch_record where del_flag='0' and (card_round_id is not null or card_species_id is not null or fishing_method='电子鱼卡')")"
+          PENDING_COUNT="$(mysql_scalar "select count(*) from fish_catch_record where del_flag='0' and status=0 and (card_round_id is not null or card_species_id is not null or fishing_method='电子鱼卡')")"
+          PROGRESS_COUNT="$(mysql_scalar "select count(*) from fish_card_progress")"
+          LATEST_REVIEW="$(mysql_scalar "select coalesce(date_format(max(create_time),'%Y-%m-%d %H:%i:%s'),'none') from fish_catch_record where del_flag='0' and (card_round_id is not null or card_species_id is not null or fishing_method='电子鱼卡')")"
+          echo "database: review_records=${REVIEW_COUNT}, pending_reviews=${PENDING_COUNT}, progress_records=${PROGRESS_COUNT}, latest_review=${LATEST_REVIEW}"
+
+          access_log=''
+          for candidate in /www/server/nginx/logs/access.log /var/log/nginx/access.log; do
+            if [ -r "${candidate}" ]; then access_log="${candidate}"; break; fi
+          done
+          if [ -n "${access_log}" ]; then
+            tail -n 50000 "${access_log}" | awk '$7 ~ /\/app\/fish-card\/submit-video/ {count[$9]++; total++} END {printf "nginx_submit_video_hits=%d", total+0; for (code in count) printf ", http_%s=%d", code, count[code]; printf "\n"}'
+          else
+            echo "nginx_submit_video_hits=unknown (access log not readable)"
+          fi
+
+          app_log="${DEPLOY_DIR}/logs/dy.jar.log"
+          if [ -r "${app_log}" ]; then
+            MULTIPART_ERRORS="$(tail -n 50000 "${app_log}" | grep -Eic 'MaxUploadSize|MultipartException|SizeLimitExceeded|FileSizeLimitExceeded' || true)"
+            echo "recent_multipart_errors=${MULTIPART_ERRORS}"
+          else
+            echo "recent_multipart_errors=unknown (application log not readable)"
+          fi
+          unset DB_PASSWORD MYSQL_PWD
+          EOF
+          else
+            sshpass -p "${SSH_PASSWORD}" "${ssh_cmd[@]}" "${remote}" "bash -s" <<'EOF'
+          set -euo pipefail
+          DEPLOY_DIR=/www/wwwroot/dyjava
+          ENV_FILE="${DEPLOY_DIR}/.env.production"
+
+          read_env_value() {
+            local key="$1"
+            local value
+            value="$(sed -n "s/^${key}=//p" "${ENV_FILE}" | tail -n 1)"
+            case "${value}" in
+              \"*\") value="${value#\"}"; value="${value%\"}" ;;
+              \'*\') value="${value#\'}"; value="${value%\'}" ;;
+            esac
+            printf '%s' "${value}"
+          }
+
+          DB_HOST="$(read_env_value DB_HOST)"
+          DB_PORT="$(read_env_value DB_PORT)"
+          DB_NAME="$(read_env_value DB_NAME)"
+          DB_USER="$(read_env_value DB_USER)"
+          DB_PASSWORD="$(read_env_value DB_PASSWORD)"
+          DB_HOST="${DB_HOST:-127.0.0.1}"
+          DB_PORT="${DB_PORT:-3306}"
+          MYSQL_BIN="$(command -v mysql || command -v mariadb)"
+
+          mysql_scalar() {
+            MYSQL_PWD="${DB_PASSWORD}" "${MYSQL_BIN}" --protocol=TCP --host="${DB_HOST}" --port="${DB_PORT}" \
+              --user="${DB_USER}" --default-character-set=utf8mb4 --batch --skip-column-names "${DB_NAME}" -e "$1"
+          }
+
+          REVIEW_COUNT="$(mysql_scalar "select count(*) from fish_catch_record where del_flag='0' and (card_round_id is not null or card_species_id is not null or fishing_method='电子鱼卡')")"
+          PENDING_COUNT="$(mysql_scalar "select count(*) from fish_catch_record where del_flag='0' and status=0 and (card_round_id is not null or card_species_id is not null or fishing_method='电子鱼卡')")"
+          PROGRESS_COUNT="$(mysql_scalar "select count(*) from fish_card_progress")"
+          LATEST_REVIEW="$(mysql_scalar "select coalesce(date_format(max(create_time),'%Y-%m-%d %H:%i:%s'),'none') from fish_catch_record where del_flag='0' and (card_round_id is not null or card_species_id is not null or fishing_method='电子鱼卡')")"
+          echo "database: review_records=${REVIEW_COUNT}, pending_reviews=${PENDING_COUNT}, progress_records=${PROGRESS_COUNT}, latest_review=${LATEST_REVIEW}"
+
+          access_log=''
+          for candidate in /www/server/nginx/logs/access.log /var/log/nginx/access.log; do
+            if [ -r "${candidate}" ]; then access_log="${candidate}"; break; fi
+          done
+          if [ -n "${access_log}" ]; then
+            tail -n 50000 "${access_log}" | awk '$7 ~ /\/app\/fish-card\/submit-video/ {count[$9]++; total++} END {printf "nginx_submit_video_hits=%d", total+0; for (code in count) printf ", http_%s=%d", code, count[code]; printf "\n"}'
+          else
+            echo "nginx_submit_video_hits=unknown (access log not readable)"
+          fi
+
+          app_log="${DEPLOY_DIR}/logs/dy.jar.log"
+          if [ -r "${app_log}" ]; then
+            MULTIPART_ERRORS="$(tail -n 50000 "${app_log}" | grep -Eic 'MaxUploadSize|MultipartException|SizeLimitExceeded|FileSizeLimitExceeded' || true)"
+            echo "recent_multipart_errors=${MULTIPART_ERRORS}"
+          else
+            echo "recent_multipart_errors=unknown (application log not readable)"
+          fi
+          unset DB_PASSWORD MYSQL_PWD
+          EOF
+          fi
